@@ -2,7 +2,7 @@ html {
     background: rgb(60, 60, 60);
 }
 
-#input {
+#textInput {
     position: fixed;
     bottom: 0;
     margin: 10px;

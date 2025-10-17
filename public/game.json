@@ -2,7 +2,7 @@
     "player": {
         "@room": "room_cell",
         "@inventory": "",
-        "@unusable-command": "That command can't be used right now."
+        "@invalid": "That command isn't valid."
     },
     "global": {},
     "rooms": {
@@ -20,7 +20,7 @@
     },
     "commands": {
         "help": {
-            "@effects": "display(Available commands: TAKE / CLEAN / OPEN)"
+            "@effects": "display(Available commands: TAKE / CLEAN / OPEN);"
         },
         "take": {
             "key": {
