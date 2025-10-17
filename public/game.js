@@ -25,7 +25,7 @@ let scope = [{}];
 const savedScope = localStorage.getItem('savedScope');
 if (savedScope) scope = JSON.parse(savedScope);
 
-await addSaves();
+addSaves();
 display(currentRoomBody());
 //runGlobal();
 
@@ -42,6 +42,7 @@ function formSubmit(event) { // given input
 }
 
 function parseInput() {
+    if (input === 'r') resetCache();
     if (input !== '') {
         display ('> '+input);
         // trimmed, per-word array clearing empties
@@ -106,9 +107,11 @@ function runEffects(effects) {
             const afterIf = effects.substring(i+1);
             const elseStart = i + 1 + // get the absolute position of possible 'else'
                 afterIf.length - afterIf.trimStart().length;
-            if (effects.startsWith('else', elseStart)) { // else found
+            if (effects.startsWith('else', elseStart) && // has 'else( whitespace or { )'
+                effects.substring(elseStart + 4).trim().startsWith('{')) { // else found
                 //make else block
                 const bracePos = effects.indexOf('{', elseStart);
+                if (bracePos === -1) { error(7, [callBuilder]); return; }
                 const elseInfo = getBlock(bracePos, effects);
                 elseBlock = effects.substring(elseInfo.start, elseInfo.end);
                 i = elseInfo.end; // i jumps to end of else block
@@ -131,7 +134,7 @@ function runEffects(effects) {
     if (depth !== 0)
         error(10, [effects]); // unbalanced parantheses
     else if (callBuilder !== '')
-        error(4, [callBuilder]); // trailing characters
+        runCall(callBuilder); // trailing characters
 }
 function getBlock(cursor, string) {
     cursor++;
@@ -143,7 +146,7 @@ function getBlock(cursor, string) {
         if (string[cursor] === '}') braceCount--;
         cursor++;
     }
-    if (braceCount > 0) error(11, [string]);
+    if (braceCount > 0) { error(11, [string]); return; }
 
     block.end = cursor - 1;
 
@@ -160,19 +163,22 @@ function runCall(call, ifBlock = null, elseBlock = null) {
         let condEnd = call.lastIndexOf(')');
         let condition = call.substring(condStart, condEnd);
         // condition is now if(THIS)
-        // evaluate and run if (and else)
-        if (evaluateCondition(condition)) runEffects(ifBlock);
+        // evaluate and run if (and else), toBool for 't'/'f'/'1'/'0'/1/0
+        if (toBoolean(evaluateCondition(condition))) runEffects(ifBlock);
         else if (elseBlock !== null) runEffects(elseBlock);
         // blocks ran
     } else { // Normal call
-        let [callName, args] = call.split('(');
-        callName = callName.trim();
+        const callName = call.split('(')[0].trim();
+        let args = call.substring(call.indexOf('(') + 1);
         args = args.slice(0, -1);
         args = parseArgs(args);
         // args -> parsed array w/ vars replaced
 
         switch (callName) {
             case 'display': display(args); break;
+            case 'move': move(args); break;
+            case 'add_item': add_item(args); break;
+            case 'delete_item': delete_item(args); break;
             //case '' : (args); break;
             //case '' : (args); break;
             default: error(12, [callName]);
@@ -259,7 +265,7 @@ function splitTopArgs(string) {
 
 // VARIABLE LOGIC
 
-function retrieve(path) {
+function retrieve(path = []) {
 
     //look in base
     let foundBase = true;
@@ -281,7 +287,7 @@ function retrieve(path) {
 
     // couldnt find error
     if (!foundBase && !foundState) {
-        error(9, path); return undefined; }
+        error(9, [JSON.stringify(path)]); return undefined; }
 
     //return state if exists, or base
     return (foundState ? valueState : valueBase);
@@ -296,12 +302,14 @@ function parseValue(string) {
     for (let i = 0; i < string.length; i++) {
         char = string[i];
 
-        if (char === '$' || char === '#') // if start of variable
+        if (char === '$' || char === '#') { // if start of variable
             if (string.length > i+1 && char === string[i+1]) { // if doubled
-                result += char;
-                i++;
+                result += char; i++;
+            } else { // if not doubled, in variable
+                inVar = true; currentVar = char;
             }
-            else inVar = true;
+            continue; // ignore if(inVar)
+        }
 
         if (inVar) { // add to var, if exists add value to result
             currentVar += char; // add to current var
@@ -310,6 +318,7 @@ function parseValue(string) {
             currentVar = '';
             inVar = false;
         }
+
         else result += char; // no var; keep adding
     }
 
@@ -338,8 +347,10 @@ function toBoolean(given, callName) {
     if (typeof given === 'boolean') return given;
     if (typeof given === 'number') return given !== 0;
     if (typeof given === 'string') {
+        //'true'=true, 'false'=false, '(number)'!==0
         if (given === 'true') return true;
         if (given === 'false') return false;
+        if (!Number.isNaN(Number(given))) return n !== 0;
         error(13, [given, callName]); return false;
     }
     error(14, [callName, typeof given]); return false;
@@ -408,13 +419,11 @@ function error(code, info) {
             errorMsg = "Unknown call '"+info[0]+"'."; break;
         case 13: // cant convert string to boolean (string, call)
             errorMsg = "Couldn't convert '"+info[0]+"' to 'true' or 'false' for '"+info[1]+"'."; break;
-        case 14: // passed wrong value to toBoolean (call, object)
-            errorMsg = "Call '"+info[0]+"' expected boolean (or number, or true/false), got '"+info[1]+"'."; break;
-        case 15: // expected } (call)
-            errorMsg = "Call '"+info[0]+"' expected '}', found none"; break;
-        /*case 16: // 
+        case 14: // cannot find item in inventory
+            errorMsg = "Couldn't find item '"+info[0]+"' in player/@inventory"; break;
+        /*case 15: // 
             errorMsg = ""; break;*/
-        /*case 17: // 
+        /*case 16: // 
             errorMsg = ""; break;*/
     }
     display('[ ERROR ]');
@@ -434,8 +443,35 @@ function hasItem(item) {
 
 function display(args) {
     args = checkArgs(1, args, 'display')
-    displayDiv.innerHTML += args[0]+'<br><br>';
+    const p = document.createElement('p');
+    p.textContent = args[0];
+    displayDiv.appendChild(p);
     displayDiv.scrollTop = displayDiv.scrollHeight;
+}
+
+function move(args) {
+    checkArgs(1, args, 'move');
+    gameState['player']['@room'] = args[0];
+    display(currentRoomBody());
+}
+
+function add_item(args) {
+    checkArgs(1, args, 'add_item');
+    const item = args[0];
+    const inv = retrieve(['player', '@inventory']);
+    if (inv === '') gameState['player']['@inventory'] = item;
+    else gameState['player']['@inventory'] = inv+', '+item;
+}
+
+function delete_item(args) {
+    checkArgs(1, args, 'delete_item');
+    const item = args[0];
+    const inv = retrieve(['player', '@inventory']);
+    if (!inv.includes(item)) { error(14, [item]); return; }
+    if (inv.startsWith(item))
+        gameState['player']['@inventory'] = inv.substring(item.length + 2);
+    else
+        gameState['player']['@inventory'] = inv.replace(', '+item, '');
 }
 
 // HELPER FUNCTIONS
@@ -463,14 +499,13 @@ function currentRoomBody() {
 }
 
 
-async function resetCache(event) {
-    event.preventDefault();
+async function resetCache() {
     localStorage.setItem('cacheBust', Date.now());
     localStorage.setItem('nextDisplay', ' and reset with cacheBust '+Date.now());
     location.reload();
 }
 
-async function addSaves() {
+function addSaves() {
     window.addEventListener('beforeunload', () => {
     localStorage.setItem('savedState', JSON.stringify(gameState));
     localStorage.setItem('savedScope', JSON.stringify(scope));
