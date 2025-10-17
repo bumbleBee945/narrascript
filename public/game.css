@@ -5,7 +5,7 @@ html {
 #textInput {
     position: fixed;
     bottom: 0;
-    margin: 10px;
+    margin-bottom: 30px;
     padding: 2px;
     left: 50%;
     transform: translateX(-50%);
@@ -17,10 +17,28 @@ html {
     text-align: center;
 }
 
+#resetButton {
+    background-color: rgb(120, 120, 120);
+    border-color: rgb(90, 90, 90);
+    font-family: Tahoma, sans-serif;
+    padding-left: 0.3%; padding-right: 0.3%;
+    padding-top: 0.1%; padding-bottom: 0.3%;
+    color: rgb(60, 60, 60);
+    cursor: pointer;
+    transition: background-color 0.1s ease;
+
+}
+#resetButton:hover {
+    background-color: rgb(100, 100, 100);
+    border-color: rgb(70, 70, 70);
+    color: rgb(40, 40, 40);
+}
+
+
 #display {
-    bottom: 60px;
+    bottom: 100px;
     width: 80%; height: 60%;
-    position: fixed; bottom: (input height + margin);
+    position: fixed; bottom: 50px;
     overflow-y: auto;
     padding-left: 10%;
     padding-bottom: 30px;
