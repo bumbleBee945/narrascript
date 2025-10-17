@@ -17,12 +17,17 @@ const gameBase = await
 
 let gameState = {};
 gameState['player'] = structuredClone(gameBase['player']);
+
+const savedState = localStorage.getItem('savedState');
+if (savedState) gameState = JSON.parse(savedState);
+
 let scope = [{}];
+const savedScope = localStorage.getItem('savedScope');
+if (savedScope) scope = JSON.parse(savedScope);
 
-//display('Loaded'+nextDisplay);
+await addSaves();
 display(currentRoomBody());
-
-//global();
+//runGlobal();
 
 
 // PARSING/LOGIC
@@ -98,10 +103,13 @@ function runEffects(effects) {
 
             // Check for else
             let elseBlock = null;
-            const afterIf = effects.substring(i+1).trim();
-            if (afterIf.startsWith('else')) { // else found
+            const afterIf = effects.substring(i+1);
+            const elseStart = i + 1 + // get the absolute position of possible 'else'
+                afterIf.length - afterIf.trimStart().length;
+            if (effects.startsWith('else', elseStart)) { // else found
                 //make else block
-                const elseInfo = getBlock(afterIf.indexOf('{') + i+1, effects);
+                const bracePos = effects.indexOf('{', elseStart);
+                const elseInfo = getBlock(bracePos, effects);
                 elseBlock = effects.substring(elseInfo.start, elseInfo.end);
                 i = elseInfo.end; // i jumps to end of else block
             }
@@ -402,9 +410,11 @@ function error(code, info) {
             errorMsg = "Couldn't convert '"+info[0]+"' to 'true' or 'false' for '"+info[1]+"'."; break;
         case 14: // passed wrong value to toBoolean (call, object)
             errorMsg = "Call '"+info[0]+"' expected boolean (or number, or true/false), got '"+info[1]+"'."; break;
-        /*case 15: // 
-            errorMsg = ""; break;*/
+        case 15: // expected } (call)
+            errorMsg = "Call '"+info[0]+"' expected '}', found none"; break;
         /*case 16: // 
+            errorMsg = ""; break;*/
+        /*case 17: // 
             errorMsg = ""; break;*/
     }
     display('[ ERROR ]');
@@ -458,4 +468,11 @@ async function resetCache(event) {
     localStorage.setItem('cacheBust', Date.now());
     localStorage.setItem('nextDisplay', ' and reset with cacheBust '+Date.now());
     location.reload();
+}
+
+async function addSaves() {
+    window.addEventListener('beforeunload', () => {
+    localStorage.setItem('savedState', JSON.stringify(gameState));
+    localStorage.setItem('savedScope', JSON.stringify(scope));
+    });
 }
