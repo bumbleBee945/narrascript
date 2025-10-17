@@ -1,4 +1,3 @@
-
 const inputBox = document.getElementById('textInput');
 inputBox.focus();
 const formInput = document.getElementById('formInput');
@@ -8,7 +7,6 @@ document.getElementById('resetButton')
 .addEventListener('click', resetCache);
 
 const displayDiv = document.getElementById('display');
-const nextDisplay = localStorage.getItem('nextDisplay') || '';
 let input = '';
 
 const cacheBust = localStorage.getItem('cacheBust') || '';
@@ -18,12 +16,13 @@ const gameBase = await
 let gameState = {};
 gameState['player'] = structuredClone(gameBase['player']);
 
+let scope = [{}];
+
 const savedState = localStorage.getItem('savedState');
 if (savedState) gameState = JSON.parse(savedState);
-
-let scope = [{}];
 const savedScope = localStorage.getItem('savedScope');
 if (savedScope) scope = JSON.parse(savedScope);
+let inReset = false;
 
 addSaves();
 display(currentRoomBody());
@@ -44,7 +43,7 @@ function formSubmit(event) { // given input
 function parseInput() {
     if (input === 'r') resetCache();
     if (input !== '') {
-        display ('> '+input);
+        display ('> '+input, false);
         // trimmed, per-word array clearing empties
         input = input.split(' ').map(s => s.trim()).filter(Boolean);
 
@@ -441,11 +440,13 @@ function hasItem(item) {
 }
 
 
-function display(args) {
+function display(args, spaced = true) {
     args = checkArgs(1, args, 'display')
-    const p = document.createElement('p');
-    p.textContent = args[0];
-    displayDiv.appendChild(p);
+    const textNode = document.createTextNode(args[0]);
+    displayDiv.appendChild(textNode);
+    displayDiv.appendChild(document.createElement('br'));
+    if (spaced)
+        displayDiv.appendChild(document.createElement('br'));
     displayDiv.scrollTop = displayDiv.scrollHeight;
 }
 
@@ -500,14 +501,17 @@ function currentRoomBody() {
 
 
 async function resetCache() {
+    inReset = true;
+    localStorage.removeItem('savedState');
+    localStorage.removeItem('savedScope');
     localStorage.setItem('cacheBust', Date.now());
-    localStorage.setItem('nextDisplay', ' and reset with cacheBust '+Date.now());
     location.reload();
 }
 
 function addSaves() {
     window.addEventListener('beforeunload', () => {
-    localStorage.setItem('savedState', JSON.stringify(gameState));
-    localStorage.setItem('savedScope', JSON.stringify(scope));
+        if (inReset) return;
+        localStorage.setItem('savedState', JSON.stringify(gameState));
+        localStorage.setItem('savedScope', JSON.stringify(scope));
     });
 }
