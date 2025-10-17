@@ -3,8 +3,8 @@ inputBox.focus();
 const formInput = document.getElementById('formInput');
 formInput.addEventListener('submit', formSubmit);
 
-document.getElementById('resetButton')
-.addEventListener('click', resetCache);
+const resetButton = document.getElementById('resetButton');
+resetButton.addEventListener('click', resetCache);
 
 const displayDiv = document.getElementById('display');
 let input = '';
@@ -17,6 +17,7 @@ let gameState = {};
 gameState['player'] = structuredClone(gameBase['player']);
 
 let scope = [{}];
+let runtimeError = '';
 
 const savedState = localStorage.getItem('savedState');
 if (savedState) gameState = JSON.parse(savedState);
@@ -425,9 +426,7 @@ function error(code, info) {
         /*case 16: // 
             errorMsg = ""; break;*/
     }
-    display('[ ERROR ]');
-    display('[ ! ] Code (EC'+code+'I'+info.length+'): '+errorMsg);
-    display('[ ERROR ]');
+    runtimeError = '[!] Error: '+errorMsg;
 }
 
 // CALLS
@@ -446,7 +445,13 @@ function display(args, isSpaced = true) {
     displayDiv.appendChild(textNode);
     displayDiv.appendChild(document.createElement('br'));
     if (isSpaced)
-        displayDiv.appendChild(document.createElement('br'));
+        if (runtimeError === '')
+            displayDiv.appendChild(document.createElement('br'));
+        else {
+            const error = runtimeError;
+            runtimeError = '';
+            display(error);
+        }
     displayDiv.scrollTop = displayDiv.scrollHeight;
 }
 
@@ -477,6 +482,10 @@ function delete_item(args) {
 
 // HELPER FUNCTIONS
 
+function sleep(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+}
+
 function upScope() {
     scope.push({});
 }
@@ -487,11 +496,11 @@ function setVar(varName, value) {
     scope[scope.length - 1][varName] = value;
 }
 function getVar(name) {
-  // search from top to bottom
-  for (let i = scope.length - 1; i >= 0; i--) {
+    // search from top to bottom
+    for (let i = scope.length - 1; i >= 0; i--) {
     if (name in scope[i]) return scope[i][name];
-  }
-  return undefined;
+    }
+    return undefined;
 }
 function currentRoomBody() {
     const room = retrieve(['player', '@room']);
