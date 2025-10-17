@@ -440,12 +440,12 @@ function hasItem(item) {
 }
 
 
-function display(args, spaced = true) {
+function display(args, isSpaced = true) {
     args = checkArgs(1, args, 'display')
     const textNode = document.createTextNode(args[0]);
     displayDiv.appendChild(textNode);
     displayDiv.appendChild(document.createElement('br'));
-    if (spaced)
+    if (isSpaced)
         displayDiv.appendChild(document.createElement('br'));
     displayDiv.scrollTop = displayDiv.scrollHeight;
 }
