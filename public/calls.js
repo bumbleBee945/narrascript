@@ -10,7 +10,7 @@ Imports from state.js, calls.js
 
 // Imports
 
-import { gameState, setError, displayDiv, runtimeError } from "./state.js";
+import { gameState, setError, displayDiv, runtimeError, setPlain, plainDisplay } from "./state.js";
 import { checkArgs, error, retrieve } from "./logic.js";
 
 // Code Scoped Functions
@@ -50,18 +50,31 @@ export function hasItem(args) {
 // Action Calls (display, move, set)
 
 export function display(args, isSpaced = true) {
-    args = checkArgs(1, args, 'display')
-    const textNode = document.createTextNode(args[0]);
-    const br = document.createElement('br');
+    let text;
+    if (args === -1) { // reset display value
+        displayDiv.replaceChildren();
+        text = plainDisplay;
+    } else { // append to displaydiv and plaindisplay
 
-    displayDiv.appendChild(textNode);
-    displayDiv.appendChild(br);
-    if (runtimeError !== '') { // pending error message
-        const error = runtimeError;
-        setError('');
-        display(error);
-    } else if (isSpaced) // two-line space (default)
-        displayDiv.appendChild(br);
+        args = checkArgs(1, args, 'display')
+        text = args[0] + '%n';
+
+        if (runtimeError !== '') { // pending error message
+            text += runtimeError + '%n';
+            setError('');
+        } else if (isSpaced) // two-line space (default)
+            text += '%n';
+
+        setPlain(plainDisplay + text);
+
+    }
+    // render %n's as line breaks
+    let parsed = '';
+    let parts = text.split('%n');
+    for (let i = 0; i < parts.length-1; i++)
+        parsed += parts[i]+'\n';
+
+    displayDiv.appendChild(document.createTextNode(parsed));
     displayDiv.scrollTop = displayDiv.scrollHeight;
 }
 export function move(args) {
@@ -85,6 +98,16 @@ export function deleteItem(args) {
         gameState['player']['@inventory'] = inv.substring(item.length + 2);
     else
         gameState['player']['@inventory'] = inv.replace(', '+item, '');
+}
+export function setProperty(args) {
+    checkArgs(3, args, 'setProperty');
+    let obj = retrieve(args.split("/"), true);
+    if (!obj) { error(16, [args[0]]); return; }
+    
+    obj.push(args[1]);
+    if (!obj) { error(17, [args[1], obj.pop()]); return; }
+    
+    retrieve(obj) = args[2];
 }
 
 

@@ -11,7 +11,7 @@ Imports from state.js, calls.js
 
 // Imports
 
-import { gameBase, setInput, gameState, scope, input, setError, inReset, setReset } from "./state.js";
+import { gameBase, setInput, gameState, scope, input, setError, inReset, setReset, plainDisplay } from "./state.js";
 import * as Calls from "./calls.js";
 
 // Understand Input
@@ -219,11 +219,11 @@ function splitTopArgs(string) {
 
 // Variable Functions
 
-export function retrieve(path = []) {
+export function retrieve(path = [], suppress = false) {
 
     //look in base
     let foundBase = true;
-    let cursor = gameBase;
+    let cursor = gameBase['main'];
     for (let i = 0; i < path.length; i++)
         if (!(path[i] in cursor)) {
             foundBase = false; break;
@@ -232,7 +232,7 @@ export function retrieve(path = []) {
 
     //look in state
     let foundState = true;
-    cursor = gameState;
+    cursor = gameState['main'];
     for (let i = 0; i < path.length; i++)
         if (!(path[i] in cursor)) {
             foundState = false; break;
@@ -241,6 +241,7 @@ export function retrieve(path = []) {
 
     // couldnt find error
     if (!foundBase && !foundState) {
+        if (suppress) return false;
         error(9, [JSON.stringify(path)]); return undefined; }
 
     //return state if exists, or base
@@ -290,6 +291,15 @@ export function getVar(name) {
     }
     return undefined;
 }
+export function findObj(obj) {
+    let family = obj.split("/");
+
+    for (let i = 0; i < family.length; i++) {
+        if (retrieve(family[i], true)) // valid; go deeper
+            cursor = cursor[input[i]];
+        else error(16, [obj]);
+    }
+}
 
 // Scope Manipulation
 
@@ -327,9 +337,10 @@ export function toNumber(given, callName) {
 // Session Management (Saves)
 
 export async function resetCache() {
-    setReset;
+    setReset();
     localStorage.removeItem('savedState');
     localStorage.removeItem('savedScope');
+    localStorage.removeItem('savedDisplay');
     localStorage.setItem('cacheBust', Date.now());
     location.reload();
 }
@@ -338,6 +349,7 @@ export function addSaves() {
         if (inReset) return;
         localStorage.setItem('savedState', JSON.stringify(gameState));
         localStorage.setItem('savedScope', JSON.stringify(scope));
+        localStorage.setItem('savedDisplay', plainDisplay);
     });
 }
 
@@ -381,9 +393,9 @@ export function checkArgs(expectedArgs, givenArgs, callName, type = 'string') {
 export function error(code, info) {
     let errorMsg = 'internal error (eMe) ['+code+'], ['+JSON.stringify(info)+']'
     switch (code) {
-        case 0: // Wrong call argument amount (call, expected, given)
+        case 0: // wrong call argument amount (call, expected, given)
             errorMsg = "Call '"+info[0]+"' expects "+info[1]+" arguments, received "+info[2]+"."; break;
-        case 1: // Couldnt convert to number (call, string)
+        case 1: // cant convert to number (call, string)
             errorMsg = "Call '"+info[0]+"' expected number, received '"+info[1]+"'."; break;
         case 2: // undefined call arg (call)
             errorMsg = "Call '"+info[0]+"' was passed an undefined value."; break;
@@ -409,11 +421,23 @@ export function error(code, info) {
             errorMsg = "Unknown call '"+info[0]+"'."; break;
         case 13: // cant convert string to boolean (string, call)
             errorMsg = "Couldn't convert '"+info[0]+"' to 'true' or 'false' for '"+info[1]+"'."; break;
-        case 14: // cannot find item in inventory
+        case 14: // cant find item in inventory
             errorMsg = "Couldn't find item '"+info[0]+"' in player/@inventory"; break;
-        case 15: // 
+        case 15: // unprefixed variable
             errorMsg = "Variables should be prefixed with $ (value), $_ (list), or # (number). Received variables '"+info[0]+"'."; break;
-        /*case 16: // 
+        case 16: // cant find object
+            errorMsg = "Cannot find object '"+info[0]+"'."; break;
+        case 17: // cant find property
+            errorMsg = "Cannot find property '"+info[0]+"' in object '"+info[1]+"'."; break;
+        /*case 18: // 
+            errorMsg = ""; break;*/
+        /*case 18: // 
+            errorMsg = ""; break;*/
+        /*case 18: // 
+            errorMsg = ""; break;*/
+        /*case 18: // 
+            errorMsg = ""; break;*/
+        /*case 18: // 
             errorMsg = ""; break;*/
     }
     setError('[!] Error: '+errorMsg);

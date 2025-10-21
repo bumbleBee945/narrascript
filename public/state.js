@@ -15,6 +15,7 @@ export let gameState = {};
 export let scope = [{}];
 export let runtimeError = '';
 export let displayDiv;
+export let plainDisplay = '';
 export let input;
 export let inReset = false;
 
@@ -37,6 +38,10 @@ export function setInput(str) {
 }
 export function setDisplay(dis) {
     displayDiv = dis;
+    displayDiv.style.whiteSpace = 'pre-wrap';
+}
+export function setPlain(plain) {
+    plainDisplay = plain;
 }
 export function setReset(bool = true) {
     inReset = bool;

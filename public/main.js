@@ -12,7 +12,7 @@ Imports from logic.js, calls.js, state.js
 
 // Imports
 
-import { setBase, setState, setReset, setInput, setScope, setDisplay, gameBase } from "./state.js";
+import { setBase, setState, setReset, setInput, setScope, setDisplay, gameBase, setPlain } from "./state.js";
 import { runGlobal, parseInput, resetCache, addSaves } from "./logic.js";
 import { display, currentRoomBody } from "./calls.js";
 
@@ -30,11 +30,13 @@ formInput.addEventListener("submit", getInput);
 
 const cacheBust = localStorage.getItem('cacheBust') || '';
 setBase(await (await fetch(`game.json?cacheBust=${cacheBust}`)).json());
-setState(structuredClone(gameBase['player']));
+setState(structuredClone(gameBase['main']['player']));
 setReset(false);
 
-// Session Saving & Restoring
+// Session Saving, Restoring
 
+const savedDisplay = localStorage.getItem('savedDisplay');
+if (savedDisplay) setPlain(savedDisplay); display(-1);
 const savedState = localStorage.getItem('savedState');
 if (savedState) setState(JSON.parse(savedState));
 const savedScope = localStorage.getItem('savedScope');
@@ -44,7 +46,7 @@ addSaves();
 // Game Code
 
 textInput.focus();
-display(currentRoomBody());
+if (!savedDisplay) display(currentRoomBody());
 runGlobal();
 
 function getInput(event) {
