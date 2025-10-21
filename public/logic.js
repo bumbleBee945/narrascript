@@ -55,7 +55,7 @@ function resolveInput() {
 
 export function runGlobal() {
     downScope();
-    runEffects(gameBase['global']['@effects']);
+    runEffects(gameBase['main']['global']['@effects']);
     upScope();
 }
 function runEffects(effects) {
@@ -229,10 +229,13 @@ export function retrieve(path = [], suppress = false) {
             foundBase = false; break;
         } else cursor = cursor[path[i]];
     let valueBase = cursor;
+    console.log('retrieving '+path[0]);
+    console.log('state: '+JSON.stringify(gameState));
 
     //look in state
     let foundState = true;
     cursor = gameState['main'];
+    console.log(cursor);
     for (let i = 0; i < path.length; i++)
         if (!(path[i] in cursor)) {
             foundState = false; break;

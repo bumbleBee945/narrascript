@@ -105,9 +105,9 @@ export function setProperty(args) {
     if (!obj) { error(16, [args[0]]); return; }
     
     obj.push(args[1]);
-    if (!obj) { error(17, [args[1], obj.pop()]); return; }
-    
-    retrieve(obj) = args[2];
+    if (!retrieve(obj, true)) { error(17, [args[1], obj.pop()]); return; }
+
+    //retrieve(obj) = args[2];
 }
 
 
