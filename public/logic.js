@@ -1,57 +1,31 @@
-const inputBox = document.getElementById('textInput');
-inputBox.focus();
-const formInput = document.getElementById('formInput');
-formInput.addEventListener('submit', formSubmit);
+/*
 
-const resetButton = document.getElementById('resetButton');
-resetButton.addEventListener('click', resetCache);
+Narrascript Logic File (./public/logic.js)
+Last updated 10/21/25 by Avery Olsen
 
-const displayDiv = document.getElementById('display');
-let input = '';
+Logic JavaScript file; parsing, variable substitution, everything but calls
+Imports from state.js, calls.js
 
-const cacheBust = localStorage.getItem('cacheBust') || '';
-const gameBase = await
-    (await fetch(`game.json?cacheBust=${cacheBust}`)).json();
-
-let gameState = {};
-gameState['player'] = structuredClone(gameBase['player']);
-
-let scope = [{}];
-let runtimeError = '';
-
-const savedState = localStorage.getItem('savedState');
-if (savedState) gameState = JSON.parse(savedState);
-const savedScope = localStorage.getItem('savedScope');
-if (savedScope) scope = JSON.parse(savedScope);
-let inReset = false;
-
-addSaves();
-display(currentRoomBody());
-//runGlobal();
+*/
 
 
-// PARSING/LOGIC
+// Imports
 
-function formSubmit(event) { // given input
-    event.preventDefault();
+import { gameBase, setInput, gameState, scope, input, setError, inReset, setReset } from "./state.js";
+import * as Calls from "./calls.js";
 
-    input = inputBox.value.toLowerCase();
-    inputBox.value = '';
-    inputBox.focus();
-    parseInput();
-}
+// Understand Input
 
-function parseInput() {
+export function parseInput() {
     if (input === 'r') resetCache();
     if (input !== '') {
-        display ('> '+input, false);
+        Calls.display('> '+input, false);
         // trimmed, per-word array clearing empties
-        input = input.split(' ').map(s => s.trim()).filter(Boolean);
+        setInput(input.split(' ').map(s => s.trim()).filter(Boolean));
 
         resolveInput();
-    } else display('Can you repeat that?');
+    } else Calls.display('Can you repeat that?');
 }
-
 function resolveInput() {
 
     // cursor to ['commands']
@@ -63,7 +37,7 @@ function resolveInput() {
         } else if ('default' in cursor) { // invalid; try to take default
             cursor = cursor['default']; break;
         } else { // no default; invalid command
-            display(retrieve(['player', '@invalid'])); return;
+            Calls.display(retrieve(['player', '@invalid'])); return;
         }
     }
     // take default if possible
@@ -77,6 +51,13 @@ function resolveInput() {
     runEffects(cursor['@effects']);
 }
 
+// Run Functions
+
+export function runGlobal() {
+    downScope();
+    runEffects(gameBase['global']['@effects']);
+    upScope();
+}
 function runEffects(effects) {
     upScope();
 
@@ -136,26 +117,9 @@ function runEffects(effects) {
     else if (callBuilder !== '')
         runCall(callBuilder); // trailing characters
 }
-function getBlock(cursor, string) {
-    cursor++;
-    let block = {};
-    block.start = cursor;
-    let braceCount = 1; // count skipped '{' at start
-    while (cursor < string.length && braceCount > 0) {
-        if (string[cursor] === '{') braceCount++;
-        if (string[cursor] === '}') braceCount--;
-        cursor++;
-    }
-    if (braceCount > 0) { error(11, [string]); return; }
-
-    block.end = cursor - 1;
-
-    return block;
-}
-
 function runCall(call, ifBlock = null, elseBlock = null) {
     if (!call.trim()) return;
-    if (!validateCall(call, ifBlock, elseBlock)) return;
+    if (!validateCall(call, ifBlock)) return;
 
     if (call.startsWith('if(')) { // Condition call
         // get condition
@@ -175,10 +139,10 @@ function runCall(call, ifBlock = null, elseBlock = null) {
         // args -> parsed array w/ vars replaced
 
         switch (callName) {
-            case 'display': display(args); break;
-            case 'move': move(args); break;
-            case 'add_item': add_item(args); break;
-            case 'delete_item': delete_item(args); break;
+            case 'display': Calls.display(args); break;
+            case 'move': Calls.move(args); break;
+            case 'addItem': Calls.addItem(args); break;
+            case 'deleteItem': Calls.deleteItem(args); break;
             //case '' : (args); break;
             //case '' : (args); break;
             default: error(12, [callName]);
@@ -186,44 +150,35 @@ function runCall(call, ifBlock = null, elseBlock = null) {
     }
 
 }
-
 function runCondition(call, args) {
     switch (call) {
-        case 'and':
-            args = checkArgs(2, args, 'and', 'boolean');
-            return args[0] && args[1];
-        case 'or':
-            args = checkArgs(2, args, 'or', 'boolean');
-            return args[0] || args[1];
-        case 'xor':
-            args = checkArgs(2, args, 'xor', 'boolean');
-            return args[0] !== args[1];
-        case 'not':
-            args = checkArgs(1, args, 'not', 'boolean');
-            return !args[0]
-        case 'equals':
-            args = checkArgs(2, args, 'equals');
-            return args[0] === args[1];
-        case 'greater':
-            args = checkArgs(2, args, 'greater', 'number');
-            return args[0] > args[1];
-        case 'isset':
-            args = checkArgs(1, args, 'isset');
-            return (args[0] !== undefined);
-        case 'has_item':
-            args = checkArgs(1, args, 'has_item');
-            return hasItem(args[0]);
-        /*case '':
-            args = checkArgs(2, args, '');
-            return args[0];*/
-        /*case '':
-            args = checkArgs(2, args, '');
-            return args[0];*/
-        default:
-            error(12, [call]); return false;
+        case 'and': case 'or': case 'xor': case 'not':
+        case 'equals': case 'greater': case 'isset':
+            return Calls.simple(call, args); // basic ones
+        case 'hasItem': return Calls.hasItem(args);
+
+        default: error(12, [call]); return false;
     }
 }
 
+// Parsing, Evaluation Functions
+
+function getBlock(cursor, string) {
+    cursor++;
+    let block = {};
+    block.start = cursor;
+    let braceCount = 1; // count skipped '{' at start
+    while (cursor < string.length && braceCount > 0) {
+        if (string[cursor] === '{') braceCount++;
+        if (string[cursor] === '}') braceCount--;
+        cursor++;
+    }
+    if (braceCount > 0) { error(11, [string]); return; }
+
+    block.end = cursor - 1;
+
+    return block;
+}
 function evaluateCondition(condition) {
     condition = condition.trim();
     const parts = condition.match(/^([a-zA-Z_]+)\((.*)\)$/);
@@ -240,7 +195,6 @@ function evaluateCondition(condition) {
 
     return runCondition(call, evaluatedArgs);
 }
-
 function parseArgs(args) {
     return splitTopArgs(args).map(arg => parseValue(arg));
 }
@@ -263,9 +217,9 @@ function splitTopArgs(string) {
     return args;
 }
 
-// VARIABLE LOGIC
+// Variable Functions
 
-function retrieve(path = []) {
+export function retrieve(path = []) {
 
     //look in base
     let foundBase = true;
@@ -292,7 +246,6 @@ function retrieve(path = []) {
     //return state if exists, or base
     return (foundState ? valueState : valueBase);
 }
-
 function parseValue(string) {
     let result = '';
     let currentVar = '';
@@ -325,10 +278,72 @@ function parseValue(string) {
     if (inVar) error(5, [currentVar]); // error check if never found var
     return result; // return parsed string
 }
+export function setVar(varName, value) {
+    if (!varName.startsWith('$') && !varName.startsWith('#')) {
+        error(15, [varName]); return; }
+    scope[scope.length - 1][varName] = value;
+}
+export function getVar(name) {
+    // search from top to bottom
+    for (let i = scope.length - 1; i >= 0; i--) {
+    if (name in scope[i]) return scope[i][name];
+    }
+    return undefined;
+}
 
-// ERROR HANDLING
+// Scope Manipulation
 
-function validateCall(call, ifBlock, elseBlock) {
+function upScope() {
+    scope.push({});
+}
+function downScope() {
+    scope.pop();
+}
+
+// Type Conversion
+
+export function toBoolean(given, callName) {
+    if (typeof given === 'boolean') return given;
+    if (typeof given === 'number') return given !== 0;
+    if (typeof given === 'string') {
+        //'true'=true, 'false'=false, '(number)'!==0
+        if (given === 'true') return true;
+        if (given === 'false') return false;
+        if (!Number.isNaN(Number(given))) return Number(given) !== 0;
+        error(13, [given, callName]); return false;
+    }
+    error(14, [callName, typeof given]); return false;
+}
+export function toNumber(given, callName) {
+    let original = given;
+    given = Number(original);
+    if (Number.isNaN(given))
+        //'false' = 0, 'true' = 1
+        if (original === 'false' || original === 'true') return Number(toBoolean(original));
+        else error(1, [callName, original]);
+    return given;
+}
+
+// Session Management (Saves)
+
+export async function resetCache() {
+    setReset;
+    localStorage.removeItem('savedState');
+    localStorage.removeItem('savedScope');
+    localStorage.setItem('cacheBust', Date.now());
+    location.reload();
+}
+export function addSaves() {
+    window.addEventListener('beforeunload', () => {
+        if (inReset) return;
+        localStorage.setItem('savedState', JSON.stringify(gameState));
+        localStorage.setItem('savedScope', JSON.stringify(scope));
+    });
+}
+
+// Error Handling
+
+function validateCall(call, ifBlock) {
     
     //check that if or else isnt missing block
     if (call.startsWith('if(') && ifBlock === null) {
@@ -342,31 +357,7 @@ function validateCall(call, ifBlock, elseBlock) {
     //valid call
     return true;
 }
-
-function toBoolean(given, callName) {
-    if (typeof given === 'boolean') return given;
-    if (typeof given === 'number') return given !== 0;
-    if (typeof given === 'string') {
-        //'true'=true, 'false'=false, '(number)'!==0
-        if (given === 'true') return true;
-        if (given === 'false') return false;
-        if (!Number.isNaN(Number(given))) return n !== 0;
-        error(13, [given, callName]); return false;
-    }
-    error(14, [callName, typeof given]); return false;
-}
-
-function toNumber(given, callName) {
-    let original = given;
-    given = Number(original);
-    if (Number.isNaN(given))
-        //'false' = 0, 'true' = 1
-        if (original === 'false' || original === 'true') return Number(toBoolean(original));
-        else error(1, [callName, original]);
-    return given;
-}
-
-function checkArgs(expectedArgs, givenArgs, callName, type = 'string') {
+export function checkArgs(expectedArgs, givenArgs, callName, type = 'string') {
     // string or number to array conversion
     if (typeof givenArgs === 'string' || typeof givenArgs === 'number' ||
         typeof givenArgs === 'boolean')
@@ -380,16 +371,15 @@ function checkArgs(expectedArgs, givenArgs, callName, type = 'string') {
         { if (given === undefined) error(2, [callName]); });
 
     for (let i = 0; i < givenArgs.length; i++) {
-        if (type === 'string') givenArgs[i] = String(givenArgs[i]);
-        if (type === 'number') givenArgs[i] = toNumber(givenArgs[i], callName);
-        if (type === 'boolean') givenArgs[i] = toBoolean(givenArgs[i], callName);
+        if (type === 'string' || type === 'str') givenArgs[i] = String(givenArgs[i]);
+        if (type === 'number' || type === 'num') givenArgs[i] = toNumber(givenArgs[i], callName);
+        if (type === 'boolean' || type === 'bool ') givenArgs[i] = toBoolean(givenArgs[i], callName);
     } // convert to type
 
     return givenArgs;
 }
-
-function error(code, info) {
-    let errorMsg = 'internal error eMe'
+export function error(code, info) {
+    let errorMsg = 'internal error (eMe) ['+code+'], ['+JSON.stringify(info)+']'
     switch (code) {
         case 0: // Wrong call argument amount (call, expected, given)
             errorMsg = "Call '"+info[0]+"' expects "+info[1]+" arguments, received "+info[2]+"."; break;
@@ -421,106 +411,13 @@ function error(code, info) {
             errorMsg = "Couldn't convert '"+info[0]+"' to 'true' or 'false' for '"+info[1]+"'."; break;
         case 14: // cannot find item in inventory
             errorMsg = "Couldn't find item '"+info[0]+"' in player/@inventory"; break;
-        /*case 15: // 
-            errorMsg = ""; break;*/
+        case 15: // 
+            errorMsg = "Variables should be prefixed with $ (value), $_ (list), or # (number). Received variables '"+info[0]+"'."; break;
         /*case 16: // 
             errorMsg = ""; break;*/
     }
-    runtimeError = '[!] Error: '+errorMsg;
-}
-
-// CALLS
-
-function hasItem(item) {
-    let items = retrieve(['player', '@inventory']).split(',');
-    for (let i = 0; i < items.length; i++)
-        if (items[i].trim() === item.trim()) return true;
-    return false;
+    setError('[!] Error: '+errorMsg);
 }
 
 
-function display(args, isSpaced = true) {
-    args = checkArgs(1, args, 'display')
-    const textNode = document.createTextNode(args[0]);
-    displayDiv.appendChild(textNode);
-    displayDiv.appendChild(document.createElement('br'));
-    if (isSpaced)
-        if (runtimeError === '')
-            displayDiv.appendChild(document.createElement('br'));
-        else {
-            const error = runtimeError;
-            runtimeError = '';
-            display(error);
-        }
-    displayDiv.scrollTop = displayDiv.scrollHeight;
-}
 
-function move(args) {
-    checkArgs(1, args, 'move');
-    gameState['player']['@room'] = args[0];
-    display(currentRoomBody());
-}
-
-function add_item(args) {
-    checkArgs(1, args, 'add_item');
-    const item = args[0];
-    const inv = retrieve(['player', '@inventory']);
-    if (inv === '') gameState['player']['@inventory'] = item;
-    else gameState['player']['@inventory'] = inv+', '+item;
-}
-
-function delete_item(args) {
-    checkArgs(1, args, 'delete_item');
-    const item = args[0];
-    const inv = retrieve(['player', '@inventory']);
-    if (!inv.includes(item)) { error(14, [item]); return; }
-    if (inv.startsWith(item))
-        gameState['player']['@inventory'] = inv.substring(item.length + 2);
-    else
-        gameState['player']['@inventory'] = inv.replace(', '+item, '');
-}
-
-// HELPER FUNCTIONS
-
-function sleep(ms) {
-    return new Promise(resolve => setTimeout(resolve, ms));
-}
-
-function upScope() {
-    scope.push({});
-}
-function downScope() {
-    scope.pop();
-}
-function setVar(varName, value) {
-    scope[scope.length - 1][varName] = value;
-}
-function getVar(name) {
-    // search from top to bottom
-    for (let i = scope.length - 1; i >= 0; i--) {
-    if (name in scope[i]) return scope[i][name];
-    }
-    return undefined;
-}
-function currentRoomBody() {
-    const room = retrieve(['player', '@room']);
-    const body = retrieve(['rooms', room, '@body']);
-    return body;
-}
-
-
-async function resetCache() {
-    inReset = true;
-    localStorage.removeItem('savedState');
-    localStorage.removeItem('savedScope');
-    localStorage.setItem('cacheBust', Date.now());
-    location.reload();
-}
-
-function addSaves() {
-    window.addEventListener('beforeunload', () => {
-        if (inReset) return;
-        localStorage.setItem('savedState', JSON.stringify(gameState));
-        localStorage.setItem('savedScope', JSON.stringify(scope));
-    });
-}
