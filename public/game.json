@@ -3,7 +3,8 @@
         "player": {
             "@room": "room_cell",
             "@inventory": "",
-            "@invalid": "That command isn't valid."
+            "@invalid": "That command isn't valid.",
+            "@test": ""
         },
         "global": {
             "@effects": ""

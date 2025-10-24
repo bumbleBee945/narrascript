@@ -11,6 +11,8 @@ Imports from state.js, calls.js
 
 // Imports
 
+let parseValues = true;
+
 import { gameBase, setInput, gameState, scope, input, setError, inReset, setReset, plainDisplay } from "./state.js";
 import * as Calls from "./calls.js";
 
@@ -118,6 +120,7 @@ function runEffects(effects) {
         runCall(callBuilder); // trailing characters
 }
 function runCall(call, ifBlock = null, elseBlock = null) {
+    console.log('runnin ' +call);
     if (!call.trim()) return;
     if (!validateCall(call, ifBlock)) return;
 
@@ -135,6 +138,7 @@ function runCall(call, ifBlock = null, elseBlock = null) {
         const callName = call.split('(')[0].trim();
         let args = call.substring(call.indexOf('(') + 1);
         args = args.slice(0, -1);
+        if (callName === 'set') parseValues = false;
         args = parseArgs(args);
         // args -> parsed array w/ vars replaced
 
@@ -143,7 +147,9 @@ function runCall(call, ifBlock = null, elseBlock = null) {
             case 'move': Calls.move(args); break;
             case 'addItem': Calls.addItem(args); break;
             case 'deleteItem': Calls.deleteItem(args); break;
-            //case '' : (args); break;
+            case 'setProperty' : Calls.setProperty(args); break;
+            case 'set': parseValues = true; Calls.set(args); break;
+            case 'add' : Calls.add(args); break;
             //case '' : (args); break;
             default: error(12, [callName]);
         }
@@ -224,22 +230,23 @@ export function retrieve(path = [], suppress = false) {
     //look in base
     let foundBase = true;
     let cursor = gameBase['main'];
-    for (let i = 0; i < path.length; i++)
+    console.log(cursor);
+    for (let i = 0; i < path.length; i++) {
+        console.log('looking for path ' + path[i] + ' in ' + JSON.stringify(cursor));
         if (!(path[i] in cursor)) {
+            console.log("not found");
             foundBase = false; break;
-        } else cursor = cursor[path[i]];
+        } else cursor = cursor[path[i]]; console.log("found"); }
     let valueBase = cursor;
-    console.log('retrieving '+path[0]);
-    console.log('state: '+JSON.stringify(gameState));
 
     //look in state
     let foundState = true;
     cursor = gameState['main'];
-    console.log(cursor);
-    for (let i = 0; i < path.length; i++)
+    for (let i = 0; i < path.length; i++) {
         if (!(path[i] in cursor)) {
             foundState = false; break;
-        } else cursor = cursor[path[i]];
+        } else { cursor = cursor[path[i]]; }
+    }
     let valueState = cursor;
 
     // couldnt find error
@@ -251,6 +258,7 @@ export function retrieve(path = [], suppress = false) {
     return (foundState ? valueState : valueBase);
 }
 function parseValue(string) {
+    if (!parseValues) return string;
     let result = '';
     let currentVar = '';
     let inVar = false;
@@ -283,6 +291,7 @@ function parseValue(string) {
     return result; // return parsed string
 }
 export function setVar(varName, value) {
+    console.log('setting '+varName+' to '+value);
     if (!varName.startsWith('$') && !varName.startsWith('#')) {
         error(15, [varName]); return; }
     scope[scope.length - 1][varName] = value;

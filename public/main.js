@@ -12,7 +12,7 @@ Imports from logic.js, calls.js, state.js
 
 // Imports
 
-import { setBase, setState, setReset, setInput, setScope, setDisplay, gameBase, gameState, setPlain } from "./state.js";
+import { setBase, setState, setReset, setInput, setScope, setDisplay, gameBase, setPlain } from "./state.js";
 import { runGlobal, parseInput, resetCache, addSaves } from "./logic.js";
 import { display, currentRoomBody } from "./calls.js";
 
