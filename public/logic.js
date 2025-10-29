@@ -208,6 +208,10 @@ function runReturnCall(callName, args) {
         case 'ceil': case 'min': case 'max':
         case 'cos': case 'sin': case 'tan':
             return Calls.math(callName, args); // math
+        case 'trim': case 'length': case 'repeat': case 'size':
+        case 'replace': case 'charAt': case 'indexOf':
+        case 'toUpper': case 'toLower': case 'replaceAll':
+            return Calls.stringManip(callName, args); // strings
         case 'hasItem': return Calls.hasItem(args);
         case 'getProperty': return Calls.getProperty(args);
 

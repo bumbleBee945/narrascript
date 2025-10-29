@@ -100,6 +100,51 @@ export function getProperty(args) {
 
     return retrieve(obj);
 }
+export function toNum(args) {
+    args = checkArgs(1, args, 'toNum');
+    const result = args[0]
+        .replace(/[^\d.]/g, '')      // strip anything that isn't a digit or a dot
+        .replace(/\.(?=.*\.)/g, ''); // remove every dot that has another dot to its right
+    return result;
+}
+export function stringManip(call, args) {
+    switch (call) {
+        case 'trim':
+            args = checkArgs(1, args, 'trim');
+            return args[0].trim();
+        case 'length':
+            return size(args);
+        case 'size':
+            args = checkArgs(1, args, 'size');
+            return args[0].length;
+        case 'replace':
+            args = checkArgs(3, args, 'replace');
+            return args[0].replace(args[1], args[2]);
+        case 'replaceAll':
+            args = checkArgs(3, args, 'replaceAll');
+            return args[0].replaceAll(args[1],args[2]);
+        case 'indexOf':
+            args = checkArgs(2, args, 'indexOf');
+            return args[0].indexOf(args[1]);
+        case 'toUpper':
+            args = checkArgs(1, args, 'toUpper');
+            return args[0].toUpper();
+        case 'toLower':
+            args = checkArgs(1, args, 'toLower');
+            return args[0].toLower();
+        case 'repeat':
+            args = checkArgs(2, args, 'repeat');
+            args[1] = checkArgs(1, args[1], 'repeat', 'num')[0];
+
+            return args[0].repeat(args[1]);
+        case 'charAt':
+            args = checkArgs(2, args, 'charAt');
+            args[1] = checkArgs(1, args[1], 'charAt', 'num')[0];
+
+            return args[0].charAt(args[1]);
+    }
+}
+
 
 // Action Calls (display, move, set)
 
