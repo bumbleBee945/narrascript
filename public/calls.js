@@ -11,7 +11,7 @@ Imports from state.js, calls.js
 // Imports
 
 import { gameState, setError, displayDiv, runtimeError, setPlain, plainDisplay } from "./state.js";
-import { checkArgs, error, retrieve, setVar, findObj, getVar } from "./logic.js";
+import { checkArgs, error, retrieve, setVar, findObj, getVar, toNumber } from "./logic.js";
 
 // Code Scoped Functions
 
@@ -157,8 +157,6 @@ export function setProperty(args) {
     args = checkArgs(3, args, 'setProperty');
     let obj = findObj(args[0]);
     if (obj === undefined) return;
-    if (!(args[1] in obj)) {
-        error(17, [args[1], args[0]]); return; }
 
     obj[args[1]] = args[2];
 }
@@ -167,6 +165,43 @@ export function set(args) {
 
     setVar(args[0], args[1]);
 }
+export function inc(args) {
+    args = checkArgs(1, args, 'inc');
+    setVar(args[0],
+        toNumber(getVar(args[0]), 'inc') + 1);
+}
+export function dec(args) {
+    args = checkArgs(1, args, 'dec');
+    setVar(args[0],
+        toNumber(getVar(args[0]), 'dec') - 1);
+}
+export function make(args) {
+    args = checkArgs(2, args, 'make');
 
+    switch (args[0]) { // validate type
+        case 'command':
+        case 'player':
+        case 'global':
+            error(19, []); return;
+        case 'room':
+            args[0] = 'rooms';
+            break;
+        case 'item':
+            args[0] = 'items';
+            break;
+        case 'dummy':
+            break;
+        default: error(20, [args[0]]); return;
+    }
 
+    const pathParts = [args[0], ...args[1].split('/')];
+    // check it exists
+    const obj = retrieve(pathParts, true);
+    if (obj !== false) { error(18, [args[0]+'/'+args[1]]); return; }
 
+    let current = gameState['main'];
+    for (let next = 0; next < pathParts.length; next++) {
+        current[pathParts[next]] = current[pathParts[next]] ?? {};
+        current = current[pathParts[next]];
+    }
+}

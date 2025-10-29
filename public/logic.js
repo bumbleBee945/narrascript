@@ -166,7 +166,13 @@ function runActionCall(call) {
         case 'set': 
             Calls.set(args);
             break;
-        case 'add' : Calls.add(args); break;
+        case 'inc' : Calls.inc(args); break;
+        case 'dec' : Calls.dec(args); break;
+        case 'make' : Calls.make(args); break;
+        //case '' : (args); break;
+        //case '' : (args); break;
+        //case '' : (args); break;
+        //case '' : (args); break;
         //case '' : (args); break;
         default: error(12, [callName]);
     }
@@ -203,6 +209,7 @@ function runReturnCall(callName, args) {
         case 'cos': case 'sin': case 'tan':
             return Calls.math(callName, args); // math
         case 'hasItem': return Calls.hasItem(args);
+        case 'getProperty': return Calls.getProperty(args);
 
         default: error(12, [callName]); return false;
     }
@@ -507,7 +514,7 @@ export function error(code, info) {
             errorMsg = "Unbalanced parantheses in effects '"+info[0]+"'."; break;
         case 11: // unbalanced braces (block)
             errorMsg = "Unbalanced braces in block '"+info[0]+"'."; break;
-        case 12: // unknown action call (name)
+        case 12: // unknown call (name)
             errorMsg = "Unknown action call '"+info[0]+"'."; break;
         case 13: // cant convert string to boolean (string, call)
             errorMsg = "Couldn't convert '"+info[0]+"' to 'true' or 'false' for '"+info[1]+"'."; break;
@@ -519,12 +526,12 @@ export function error(code, info) {
             errorMsg = "Cannot find object '"+info[0]+"'."; break;
         case 17: // cant find property
             errorMsg = "Cannot find property '"+info[0]+"' in object '"+info[1]+"'."; break;
-        /*case 18: // 
-            errorMsg = ""; break;*/
-        /*case 18: // 
-            errorMsg = ""; break;*/
-        /*case 18: // 
-            errorMsg = ""; break;*/
+        case 18: // object already exists
+            errorMsg = "Object '"+info[0]+"' already exists"; break;
+        case 19: // cannot create object type
+            errorMsg = "Cannot create object of type (player, global, command)"; break;
+        case 20: // unknown object type
+            errorMsg = "Unknown object type '"+info[0]+"'"; break;
         /*case 18: // 
             errorMsg = ""; break;*/
         /*case 18: // 
