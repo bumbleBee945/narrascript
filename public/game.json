@@ -23,6 +23,15 @@
             "open_door": {}
         },
         "commands": {
+            "check": {
+                "@effects": "if(not(isset(#lol))) { display(variable is not set.); } else { display(variable is #lol.); if(equals(#lol, 5)) { display(\\(equal to five\\)); } else { if(greater(#lol, 5)) { display(\\(greater than five\\)); } else { display(\\(less than five\\)); } } }"
+            },
+            "set": {
+                "@effects": "if(isset(#lol)) { display(the variable is already set.); } else { set(#lol, 0); }"
+            },
+            "add": {
+                "@effects": "if(isset(#lol)) { set(#lol, add(#lol, 1)); display(added 1 to the variable.); } else { display(the variable isn't set.); }"
+            },
             "help": {
                 "@effects": "display(Available commands: TAKE / CLEAN / OPEN);"
             },

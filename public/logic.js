@@ -1,7 +1,7 @@
 /*
 
 Narrascript Logic File (./public/logic.js)
-Last updated 10/21/25 by Avery Olsen
+Last updated 10/24/25 by Avery Olsen
 
 Logic JavaScript file; parsing, variable substitution, everything but calls
 Imports from state.js, calls.js
@@ -10,8 +10,6 @@ Imports from state.js, calls.js
 
 
 // Imports
-
-let parseValues = true;
 
 import { gameBase, setInput, gameState, scope, input, setError, inReset, setReset, plainDisplay } from "./state.js";
 import * as Calls from "./calls.js";
@@ -60,52 +58,46 @@ export function runGlobal() {
     runEffects(gameBase['main']['global']['@effects']);
     upScope();
 }
-function runEffects(effects) {
+function runEffects(fullStr) {
     upScope();
+    let char = '';
+    let currentCall = '';
 
     // allow comments
-    effects = effects.replace(/\/\/.*$/gm, '');
-    let char;
-    let callBuilder = '';
-    let length = effects.length;
-    let depth = 0;
+    // fullStr = fullStr.replace(/\/\/.*$/gm, '');
 
-    for (let i = 0; i < length; i++) { // run loop
-        char = effects[i];
+    let depth = 0;
+    let length = fullStr.length;
+    for (let cursor = 0; cursor < length; cursor++) { // run loop
+        char = fullStr[cursor];
+        // ignore whitespace
         if (char.trim() === '' && depth === 0) continue;
 
-        // Run a complete call
+        // Escape char
+        if (char === '\\' && length > cursor+1) {
+            cursor++;
+            //dont pass whitespace
+            if (fullStr[cursor].trim() === '' && depth === 0) continue
+
+            currentCall += char;
+            currentCall += fullStr[cursor];
+            continue;
+
+        // complete call
+        }
         if (char === ';' && depth === 0) {
-            runCall(callBuilder);
-            callBuilder = '';
-        // Check for block start
-        } else if (char === '{' && depth === 0) {
-            //make if block
-            const ifInfo = getBlock(i, effects);
-            const ifBlock = effects.substring(ifInfo.start, ifInfo.end);
-            i = ifInfo.end; // i jumps to end of if block
+            runActionCall(currentCall);
+            currentCall = '';
+            continue;
+        // check for block (while, if, for)
+        }
+        if (char === '{' && depth === 0) {
+            cursor = runBlock(fullStr, cursor, currentCall);
+            currentCall = '';
+            continue;
+        }
 
-            // Check for else
-            let elseBlock = null;
-            const afterIf = effects.substring(i+1);
-            const elseStart = i + 1 + // get the absolute position of possible 'else'
-                afterIf.length - afterIf.trimStart().length;
-            if (effects.startsWith('else', elseStart) && // has 'else( whitespace or { )'
-                effects.substring(elseStart + 4).trim().startsWith('{')) { // else found
-                //make else block
-                const bracePos = effects.indexOf('{', elseStart);
-                if (bracePos === -1) { error(7, [callBuilder]); return; }
-                const elseInfo = getBlock(bracePos, effects);
-                elseBlock = effects.substring(elseInfo.start, elseInfo.end);
-                i = elseInfo.end; // i jumps to end of else block
-            }
-
-            //callBuilder is the if(this),
-            //ifblock is {this}, else block is else {this}
-            runCall(callBuilder, ifBlock, elseBlock);
-            callBuilder = '';
-
-        } else callBuilder += char; // keep adding
+        currentCall += char; // keep adding
         if (char === '(') depth++;
         if (char === ')') depth--;
 
@@ -115,55 +107,101 @@ function runEffects(effects) {
 
     // error check
     if (depth !== 0)
-        error(10, [effects]); // unbalanced parantheses
-    else if (callBuilder !== '')
-        runCall(callBuilder); // trailing characters
+        error(10, [fullStr]); // unbalanced parantheses
+    else if (currentCall !== '')
+        runActionCall(currentCall); // trailing characters
 }
-function runCall(call, ifBlock = null, elseBlock = null) {
+
+function runBlock(fullStr, cursor, currentCall) {
+        //make block
+        const blockInfo = getBlock(cursor, fullStr);
+        const blockContent = fullStr.substring(blockInfo.start, blockInfo.end);
+        let secondaryContent = null;
+        cursor = blockInfo.end; // jump cursor to end
+
+        // No secondary content, good to continue
+        if (!currentCall.startsWith('if(')) {
+            runBlockCall(currentCall, blockContent);
+            return blockInfo.end;
+        }
+
+        // get content after if()
+        const afterIf = fullStr.substring(blockInfo.end + 1);
+        // get the abs position of possible else
+        const elseStart = blockInfo.end + 1 + afterIf.length - afterIf.trimStart().length;
+
+        if (!(fullStr.startsWith('else', elseStart) && // if no else
+                    fullStr.substring(elseStart + 4).trim().startsWith('{'))) {
+            runBlockCall(currentCall, blockContent); return blockInfo.end; }
+
+        //make else block
+        const bracePos = fullStr.indexOf('{', elseStart);
+        const secondaryInfo = getBlock(bracePos, fullStr);
+        secondaryContent = fullStr.substring(secondaryInfo.start, secondaryInfo.end);
+
+        runBlockCall(currentCall, blockContent, secondaryContent);
+        return secondaryInfo.end;
+}
+function runActionCall(call) {
+    console.log('runnin '+call);
+    if (!call.trim()) return;
+    if (!validateCall(call)) return;
+
+    const callName = call.split('(')[0].trim();
+    let args = call.substring(call.indexOf('(') + 1);
+    args = args.slice(0, -1);
+    // if set(), dont parse first value
+    args = parseArgs(args, (callName === 'set' ? false : true));
+    // args -> parsed array w/ vars replaced
+
+    switch (callName) {
+        case 'display': Calls.display(args); break;
+        case 'move': Calls.move(args); break;
+        case 'addItem': Calls.addItem(args); break;
+        case 'deleteItem': Calls.deleteItem(args); break;
+        case 'setProperty' : Calls.setProperty(args); break;
+        case 'set': 
+            Calls.set(args);
+            break;
+        case 'add' : Calls.add(args); break;
+        //case '' : (args); break;
+        default: error(12, [callName]);
+    }
+}
+function runBlockCall(call, blockContent, secondaryContent = null) {
     console.log('runnin ' +call);
     if (!call.trim()) return;
-    if (!validateCall(call, ifBlock)) return;
+    if (!validateCall(call, blockContent)) return;
+    const callName = call.split('(')[0].trim();
 
-    if (call.startsWith('if(')) { // Condition call
-        // get condition
-        let condStart = call.indexOf('(') + 1;
-        let condEnd = call.lastIndexOf(')');
-        let condition = call.substring(condStart, condEnd);
-        // condition is now if(THIS)
-        // evaluate and run if (and else), toBool for 't'/'f'/'1'/'0'/1/0
-        if (toBoolean(evaluateCondition(condition))) runEffects(ifBlock);
-        else if (elseBlock !== null) runEffects(elseBlock);
-        // blocks ran
-    } else { // Normal call
-        const callName = call.split('(')[0].trim();
-        let args = call.substring(call.indexOf('(') + 1);
-        args = args.slice(0, -1);
-        if (callName === 'set') parseValues = false;
-        args = parseArgs(args);
-        // args -> parsed array w/ vars replaced
-
-        switch (callName) {
-            case 'display': Calls.display(args); break;
-            case 'move': Calls.move(args); break;
-            case 'addItem': Calls.addItem(args); break;
-            case 'deleteItem': Calls.deleteItem(args); break;
-            case 'setProperty' : Calls.setProperty(args); break;
-            case 'set': parseValues = true; Calls.set(args); break;
-            case 'add' : Calls.add(args); break;
-            //case '' : (args); break;
-            default: error(12, [callName]);
-        }
+    switch (callName) {
+        case 'if':
+            // get condition
+            let condStart = call.indexOf('(') + 1;
+            let condEnd = call.lastIndexOf(')');
+            let condition = call.substring(condStart, condEnd);
+            let result = parseArgs(condition)[0];
+            // result is now true/false
+            if (toBoolean(result)) runEffects(blockContent);
+            else if (secondaryContent !== null) runEffects(secondaryContent);
+            break;
     }
-
 }
-function runCondition(call, args) {
-    switch (call) {
+function runReturnCall(callName, args) {
+    console.log('runnin '+callName+' with args ('+args+')');
+    switch (callName) {
         case 'and': case 'or': case 'xor': case 'not':
         case 'equals': case 'greater': case 'isset':
-            return Calls.simple(call, args); // basic ones
+            return Calls.simple(callName, args); // basic ones
+        case 'add': case 'sub': case 'mult': case 'div':
+        case 'mod': case 'pow': case 'sqrt': case 'abs':
+        case 'round': case 'random': case 'floor':
+        case 'ceil': case 'min': case 'max':
+        case 'cos': case 'sin': case 'tan':
+            return Calls.math(callName, args); // math
         case 'hasItem': return Calls.hasItem(args);
 
-        default: error(12, [call]); return false;
+        default: error(12, [callName]); return false;
     }
 }
 
@@ -175,6 +213,8 @@ function getBlock(cursor, string) {
     block.start = cursor;
     let braceCount = 1; // count skipped '{' at start
     while (cursor < string.length && braceCount > 0) {
+        if (string[cursor] === '\\' && string.length > cursor + 1) { // escape char
+            cursor += 2; continue; }
         if (string[cursor] === '{') braceCount++;
         if (string[cursor] === '}') braceCount--;
         cursor++;
@@ -185,32 +225,49 @@ function getBlock(cursor, string) {
 
     return block;
 }
-function evaluateCondition(condition) {
-    condition = condition.trim();
-    const parts = condition.match(/^([a-zA-Z_]+)\((.*)\)$/);
-    // return condition if no call
-    if (!parts) return condition;
-    const call = parts[1];
-    const args = parseArgs(parts[2]);
-    //call is now this(_), args are now _(this)
+function evaluate(givenValue) {
+    givenValue = (givenValue+'').trim();
+    const parts = givenValue.match(/^([a-zA-Z_]+)\((.*)\)$/);
+
+    // return if no return call
+    if (!parts) { return givenValue; }
+
+    const returnCall = parts[1];
+    const args = parseArgs(parts[2]); // args is an array
+    //returnCall is now THIS(), args are now (THIS)
     //evaluate each arg recursively
     let evaluatedArgs = [];
     for (let i = 0; i < args.length; i++) {
-        evaluatedArgs[i] = evaluateCondition(args[i]);
+        evaluatedArgs[i] = evaluate(args[i]);
     }
 
-    return runCondition(call, evaluatedArgs);
+    return runReturnCall(returnCall, evaluatedArgs);
 }
-function parseArgs(args) {
-    return splitTopArgs(args).map(arg => parseValue(arg));
+function parseArgs(args, parseFirst = true) {
+    console.log('parseArgs on '+args);
+    //args is 'sqrt(4), #two, Two'
+    args = splitArgs(args);
+    //args is ['sqrt(4)', '#two', 'Two']
+    for (let i = 0; i < args.length; i++) {
+        if (!parseFirst && i === 0) continue;
+        args[i] = parseValue(args[i]);
+        args[i] = evaluate(args[i]);
+    }
+    //args is [2, 2, 'Two']
+    return args;
 }
-function splitTopArgs(string) {
+function splitArgs(string) {
     let depth = 0;
     let args = [];
     let currentArg = '';
 
     for (let i = 0; i < string.length; i++) {
         const char = string[i];
+        // escape char
+        if (char === '\\' && string.length > i+1) {
+            currentArg += string[i+1];
+            i++; continue;
+        }
         if (char === '(') depth++;
         if (char === ')') depth--;
         if (char === ',' && depth === 0) {
@@ -230,13 +287,10 @@ export function retrieve(path = [], suppress = false) {
     //look in base
     let foundBase = true;
     let cursor = gameBase['main'];
-    console.log(cursor);
     for (let i = 0; i < path.length; i++) {
-        console.log('looking for path ' + path[i] + ' in ' + JSON.stringify(cursor));
         if (!(path[i] in cursor)) {
-            console.log("not found");
             foundBase = false; break;
-        } else cursor = cursor[path[i]]; console.log("found"); }
+        } else cursor = cursor[path[i]]; }
     let valueBase = cursor;
 
     //look in state
@@ -258,7 +312,8 @@ export function retrieve(path = [], suppress = false) {
     return (foundState ? valueState : valueBase);
 }
 function parseValue(string) {
-    if (!parseValues) return string;
+    console.log('parsing '+string);
+
     let result = '';
     let currentVar = '';
     let inVar = false;
@@ -267,18 +322,19 @@ function parseValue(string) {
     for (let i = 0; i < string.length; i++) {
         char = string[i];
 
-        if (char === '$' || char === '#') { // if start of variable
-            if (string.length > i+1 && char === string[i+1]) { // if doubled
-                result += char; i++;
-            } else { // if not doubled, in variable
-                inVar = true; currentVar = char;
-            }
-            continue; // ignore if(inVar)
+        if (char === '\\' && string.length > i+1) { // escape char
+            i++; // get escaped char
+            result += string[i]; // add to result
+            continue;
+        } else if (char === '$' || char === '#') { // variable start
+            inVar = true; currentVar = char;
+            continue; //
         }
 
         if (inVar) { // add to var, if exists add value to result
             currentVar += char; // add to current var
-            if (getVar(currentVar) === undefined) continue; 
+            if (getVar(currentVar) === undefined)
+                continue; 
             result += getVar(currentVar); // var exists
             currentVar = '';
             inVar = false;
@@ -291,7 +347,6 @@ function parseValue(string) {
     return result; // return parsed string
 }
 export function setVar(varName, value) {
-    console.log('setting '+varName+' to '+value);
     if (!varName.startsWith('$') && !varName.startsWith('#')) {
         error(15, [varName]); return; }
     scope[scope.length - 1][varName] = value;
@@ -304,13 +359,9 @@ export function getVar(name) {
     return undefined;
 }
 export function findObj(obj) {
-    let family = obj.split("/");
-
-    for (let i = 0; i < family.length; i++) {
-        if (retrieve(family[i], true)) // valid; go deeper
-            cursor = cursor[input[i]];
-        else error(16, [obj]);
-    }
+    const result = retrieve(obj.split("/"), true);
+    if (result === false) { error(16, [obj]); return; }
+    return result;
 }
 
 // Scope Manipulation
@@ -367,10 +418,10 @@ export function addSaves() {
 
 // Error Handling
 
-function validateCall(call, ifBlock) {
+function validateCall(call, blockContent = null) {
     
-    //check that if or else isnt missing block
-    if (call.startsWith('if(') && ifBlock === null) {
+    //check that if isnt missing block
+    if (call.startsWith('if(') && blockContent === null) {
         error(7, [call]); return false;
     }
     //check for ( after call
@@ -382,6 +433,7 @@ function validateCall(call, ifBlock) {
     return true;
 }
 export function checkArgs(expectedArgs, givenArgs, callName, type = 'string') {
+    if (expectedArgs === 0 && givenArgs === '') return [''];
     // string or number to array conversion
     if (typeof givenArgs === 'string' || typeof givenArgs === 'number' ||
         typeof givenArgs === 'boolean')
@@ -397,7 +449,7 @@ export function checkArgs(expectedArgs, givenArgs, callName, type = 'string') {
     for (let i = 0; i < givenArgs.length; i++) {
         if (type === 'string' || type === 'str') givenArgs[i] = String(givenArgs[i]);
         if (type === 'number' || type === 'num') givenArgs[i] = toNumber(givenArgs[i], callName);
-        if (type === 'boolean' || type === 'bool ') givenArgs[i] = toBoolean(givenArgs[i], callName);
+        if (type === 'boolean' || type === 'bool') givenArgs[i] = toBoolean(givenArgs[i], callName);
     } // convert to type
 
     return givenArgs;
@@ -429,8 +481,8 @@ export function error(code, info) {
             errorMsg = "Unbalanced parantheses in effects '"+info[0]+"'."; break;
         case 11: // unbalanced braces (block)
             errorMsg = "Unbalanced braces in block '"+info[0]+"'."; break;
-        case 12: // unknown call (name)
-            errorMsg = "Unknown call '"+info[0]+"'."; break;
+        case 12: // unknown action call (name)
+            errorMsg = "Unknown action call '"+info[0]+"'."; break;
         case 13: // cant convert string to boolean (string, call)
             errorMsg = "Couldn't convert '"+info[0]+"' to 'true' or 'false' for '"+info[1]+"'."; break;
         case 14: // cant find item in inventory

@@ -1,7 +1,7 @@
 /*
 
 Narrascript Main File (./public/main.js)
-Last updated 10/21/25 by Avery Olsen
+Last updated 10/24/25 by Avery Olsen
 
 Main JavaScript file; session load/save, initialization, overall control flow.
 Imports from logic.js, calls.js, state.js

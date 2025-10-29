@@ -1,7 +1,7 @@
 /*
 
 Narrascript State File (./public/state.js)
-Last updated 10/21/25 by Avery Olsen
+Last updated 10/24/25 by Avery Olsen
 
 State JavaScript file; Stores global states; initialization function
 Made to decrease amount of variables passed through functions

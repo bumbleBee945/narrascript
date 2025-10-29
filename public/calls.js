@@ -1,7 +1,7 @@
 /*
 
 Narrascript Logic File (./public/logic.js)
-Last updated 10/21/25 by Avery Olsen
+Last updated 10/24/25 by Avery Olsen
 
 Logic JavaScript file; parsing, variable substitution, everything but calls
 Imports from state.js, calls.js
@@ -11,7 +11,7 @@ Imports from state.js, calls.js
 // Imports
 
 import { gameState, setError, displayDiv, runtimeError, setPlain, plainDisplay } from "./state.js";
-import { checkArgs, error, retrieve, setVar } from "./logic.js";
+import { checkArgs, error, retrieve, setVar, findObj } from "./logic.js";
 
 // Code Scoped Functions
 
@@ -36,6 +36,46 @@ export function simple(call, args) { // (and,or,xor,not,equals,greater,isset)
         case 'greater': args = checkArgs(2, args, 'greater', 'num'); return args[0] > args[1];
         case 'isset': args = checkArgs(1, args, 'isset'); return (args[0] !== undefined);
         default: display('internal error (no simple) ['+call+']'); return false;
+    }
+}
+export function math(call, args) { // all math
+    switch (call) {
+    case 'add': args = checkArgs(2, args, 'add', 'num');
+        return args[0] + args[1];
+    case 'sub': args = checkArgs(2, args, 'sub', 'num');
+        return args[0] - args[1];
+    case 'mult': args = checkArgs(2, args, 'mult', 'num');
+        return args[0] * args[1];
+    case 'div': args = checkArgs(2, args, 'div', 'num');
+        return args[0] / args[1];
+    case 'mod': args = checkArgs(2, args, 'mod', 'num');
+        return args[0] % args[1];
+    case 'pow': args = checkArgs(2, args, 'pow', 'num');
+        return Math.pow(args[0], args[1]);
+    case 'sqrt': args = checkArgs(1, args, 'sqrt', 'num');
+        return Math.sqrt(args[0]);
+    case 'round': args = checkArgs(1, args, 'round', 'num');
+        return Math.round(args[0]);
+    case 'random':
+        args = (args === '' ? [''] : checkArgs(2, args, 'random', 'num'));
+        if (args[0] === '') return Math.random();
+        return parseInt(Math.random() * (args[1] - args[0] + 1)) + args[0];
+    case 'abs': args = checkArgs(1, args, 'abs', 'num');
+        return Math.abs(args[0]);
+    case 'floor': args = checkArgs(1, args, 'floor', 'num');
+        return Math.floor(args[0]);
+    case 'ceil': args = checkArgs(1, args, 'ceil', 'num');
+        return Math.ceil(args[0]);
+    case 'min': args = checkArgs(2, args, 'min', 'num');
+        return Math.min(args[0], args[1]);
+    case 'max': args = checkArgs(2, args, 'max', 'num');
+        return Math.max(args[0], args[1]);
+    case 'cos': args = checkArgs(1, args, 'cos', 'num');
+        return Math.cos(args[0]);
+    case 'sin': args = checkArgs(1, args, 'sin', 'num');
+        return Math.sin(args[0]);
+    case 'tan': args = checkArgs(1, args, 'tan', 'num');
+        return Math.tan(args[0]);
     }
 }
 export function hasItem(args) {
@@ -75,6 +115,7 @@ export function display(args, isSpaced = true) {
 
         if (runtimeError !== '') { // pending error message
             text += runtimeError + '%n';
+            console.log('error')
             setError('');
         } else if (isSpaced) // two-line space (default)
             text += '%n';
@@ -115,10 +156,12 @@ export function deleteItem(args) {
 }
 export function setProperty(args) {
     args = checkArgs(3, args, 'setProperty');
-    let obj = args[0].split("/");
-    if (!retrieve(obj, true)) { error(16, [args[0]]); return; }
+    let obj = findObj(args[0]);
+    if (obj === undefined) return;
+    if (!(args[1] in obj)) {
+        error(17, [args[1], args[0]]); return; }
 
-    //retrieve(obj) = args[2];
+    obj[args[1]] = args[2];
 }
 export function set(args) {
     args = checkArgs(2, args, 'set');
