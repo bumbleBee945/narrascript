@@ -31,7 +31,7 @@ export function setScope(newScope) {
   scope = newScope;
 }
 export function setError(error) {
-  runtimeError = error;
+  runtimeError += error+"%n";
 }
 export function setInput(str) {
   input = str;

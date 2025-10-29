@@ -11,7 +11,7 @@ Imports from state.js, calls.js
 // Imports
 
 import { gameState, setError, displayDiv, runtimeError, setPlain, plainDisplay } from "./state.js";
-import { checkArgs, error, retrieve, setVar, findObj } from "./logic.js";
+import { checkArgs, error, retrieve, setVar, findObj, getVar } from "./logic.js";
 
 // Code Scoped Functions
 
@@ -34,7 +34,7 @@ export function simple(call, args) { // (and,or,xor,not,equals,greater,isset)
         case 'not': args = checkArgs(1, args, 'not', 'bool'); return !args[0];
         case 'equals': args = checkArgs(2, args, 'equals'); return args[0] === args[1];
         case 'greater': args = checkArgs(2, args, 'greater', 'num'); return args[0] > args[1];
-        case 'isset': args = checkArgs(1, args, 'isset'); return (args[0] !== undefined);
+        case 'isset': args = checkArgs(1, args, 'isset'); return (getVar(args[0]) !== undefined);
         default: display('internal error (no simple) ['+call+']'); return false;
     }
 }
@@ -115,7 +115,6 @@ export function display(args, isSpaced = true) {
 
         if (runtimeError !== '') { // pending error message
             text += runtimeError + '%n';
-            console.log('error')
             setError('');
         } else if (isSpaced) // two-line space (default)
             text += '%n';

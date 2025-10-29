@@ -7,7 +7,7 @@
             "@test": ""
         },
         "global": {
-            "@effects": ""
+            "@effects": "set(#lol, 0);"
         },
         "rooms": {
             "room_cell": {

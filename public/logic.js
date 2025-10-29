@@ -17,6 +17,7 @@ import * as Calls from "./calls.js";
 // Understand Input
 
 export function parseInput() {
+    cLog('\nnew input ['+input+']');
     if (input === 'r') resetCache();
     if (input !== '') {
         Calls.display('> '+input, false);
@@ -54,12 +55,13 @@ function resolveInput() {
 // Run Functions
 
 export function runGlobal() {
-    downScope();
-    runEffects(gameBase['main']['global']['@effects']);
-    upScope();
+    cLog('running global');
+    runEffects(gameBase['main']['global']['@effects'], false);
+    cLog('global run');
 }
-function runEffects(fullStr) {
-    upScope();
+function runEffects(fullStr, manageScope = true) {
+    cLog('running effects starting with '+fullStr.substring(0, 50)+'...');
+    if (manageScope) upScope();
     let char = '';
     let currentCall = '';
 
@@ -103,13 +105,14 @@ function runEffects(fullStr) {
 
     }
 
-    downScope();
+    if (manageScope) downScope();
 
     // error check
     if (depth !== 0)
         error(10, [fullStr]); // unbalanced parantheses
     else if (currentCall !== '')
         runActionCall(currentCall); // trailing characters
+    cLog('finished effects starting with '+fullStr.substring(0, 15)+'...');
 }
 
 function runBlock(fullStr, cursor, currentCall) {
@@ -143,7 +146,7 @@ function runBlock(fullStr, cursor, currentCall) {
         return secondaryInfo.end;
 }
 function runActionCall(call) {
-    console.log('runnin '+call);
+    cLog('|-> runnin '+call);
     if (!call.trim()) return;
     if (!validateCall(call)) return;
 
@@ -151,7 +154,7 @@ function runActionCall(call) {
     let args = call.substring(call.indexOf('(') + 1);
     args = args.slice(0, -1);
     // if set(), dont parse first value
-    args = parseArgs(args, (callName === 'set' ? false : true));
+    args = parseArgs(args, (callName === 'set' ? 1 : 0));
     // args -> parsed array w/ vars replaced
 
     switch (callName) {
@@ -169,7 +172,7 @@ function runActionCall(call) {
     }
 }
 function runBlockCall(call, blockContent, secondaryContent = null) {
-    console.log('runnin ' +call);
+    cLog('runnin ' +call);
     if (!call.trim()) return;
     if (!validateCall(call, blockContent)) return;
     const callName = call.split('(')[0].trim();
@@ -188,7 +191,7 @@ function runBlockCall(call, blockContent, secondaryContent = null) {
     }
 }
 function runReturnCall(callName, args) {
-    console.log('runnin '+callName+' with args ('+args+')');
+    cLog('|-> runnin '+callName+' with args ('+args+')');
     switch (callName) {
         case 'and': case 'or': case 'xor': case 'not':
         case 'equals': case 'greater': case 'isset':
@@ -225,7 +228,7 @@ function getBlock(cursor, string) {
 
     return block;
 }
-function evaluate(givenValue) {
+function evaluate(givenValue, minParse = 0) {
     givenValue = (givenValue+'').trim();
     const parts = givenValue.match(/^([a-zA-Z_]+)\((.*)\)$/);
 
@@ -233,25 +236,26 @@ function evaluate(givenValue) {
     if (!parts) { return givenValue; }
 
     const returnCall = parts[1];
-    const args = parseArgs(parts[2]); // args is an array
+    const args = parseArgs(parts[2], minParse); // args is an array
     //returnCall is now THIS(), args are now (THIS)
     //evaluate each arg recursively
     let evaluatedArgs = [];
     for (let i = 0; i < args.length; i++) {
-        evaluatedArgs[i] = evaluate(args[i]);
+        evaluatedArgs[i] = evaluate(args[i], minParse);
     }
 
     return runReturnCall(returnCall, evaluatedArgs);
 }
-function parseArgs(args, parseFirst = true) {
-    console.log('parseArgs on '+args);
+function parseArgs(args, minParse = 0) {
+    cLog('|---> parsing args '+args);
     //args is 'sqrt(4), #two, Two'
     args = splitArgs(args);
+    if (args[0].startsWith('isset')) { minParse = 1; }
     //args is ['sqrt(4)', '#two', 'Two']
     for (let i = 0; i < args.length; i++) {
-        if (!parseFirst && i === 0) continue;
-        args[i] = parseValue(args[i]);
-        args[i] = evaluate(args[i]);
+        if (i >= minParse) {
+            args[i] = parseValue(args[i]); minParse = 0; }
+        args[i] = evaluate(args[i], minParse);
     }
     //args is [2, 2, 'Two']
     return args;
@@ -312,22 +316,27 @@ export function retrieve(path = [], suppress = false) {
     return (foundState ? valueState : valueBase);
 }
 function parseValue(string) {
-    console.log('parsing '+string);
+    cLog('|-----> parsing value '+string);
 
     let result = '';
     let currentVar = '';
     let inVar = false;
+    let depth = 0;
     let char;
 
     for (let i = 0; i < string.length; i++) {
         char = string[i];
 
+        if (char === '(') depth++;
+        if (char === ')') depth--;
+        if (depth !== 0) { result += char; continue; }
         if (char === '\\' && string.length > i+1) { // escape char
             i++; // get escaped char
             result += string[i]; // add to result
             continue;
         } else if (char === '$' || char === '#') { // variable start
             inVar = true; currentVar = char;
+            cLog('|-------> searching for '+string.substring(i));
             continue; //
         }
 
@@ -349,13 +358,27 @@ function parseValue(string) {
 export function setVar(varName, value) {
     if (!varName.startsWith('$') && !varName.startsWith('#')) {
         error(15, [varName]); return; }
-    scope[scope.length - 1][varName] = value;
+    if (getVar(varName) === undefined) {
+        scope[scope.length - 1][varName] = value;
+        cLog('|---------> set var '+varName+' to '+value+' in scope '+(scope.length - 1));
+        return;
+    }
+    for (let i = scope.length - 1; i >= 0; i--) {
+        if (varName in scope[i]) {
+            scope[i][varName] = value;
+            cLog('|---------> set var '+varName+' to '+value+' in scope '+i);
+        }
+    }
 }
 export function getVar(name) {
     // search from top to bottom
     for (let i = scope.length - 1; i >= 0; i--) {
-    if (name in scope[i]) return scope[i][name];
+        if (name in scope[i]) {
+            cLog('|-------> found '+name+' in scope '+i);
+            return scope[i][name];
+            }
     }
+    cLog('|-------> could not find '+name);
     return undefined;
 }
 export function findObj(obj) {
@@ -368,9 +391,11 @@ export function findObj(obj) {
 
 function upScope() {
     scope.push({});
+    cLog('upscope, current depth '+(scope.length-1));
 }
 function downScope() {
     scope.pop();
+    cLog('downscope, current depth '+(scope.length-1));
 }
 
 // Type Conversion
@@ -455,6 +480,7 @@ export function checkArgs(expectedArgs, givenArgs, callName, type = 'string') {
     return givenArgs;
 }
 export function error(code, info) {
+    cLog('error '+code);
     let errorMsg = 'internal error (eMe) ['+code+'], ['+JSON.stringify(info)+']'
     switch (code) {
         case 0: // wrong call argument amount (call, expected, given)
@@ -507,5 +533,10 @@ export function error(code, info) {
     setError('[!] Error: '+errorMsg);
 }
 
-
-
+function cLog(str) {
+    let result = '';
+    for (let i = 0; i < scope.length-1; i++)
+        result += '\t';
+    result = result + str;
+    console.log(result);
+}
