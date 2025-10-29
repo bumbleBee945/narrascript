@@ -224,16 +224,13 @@ export function make(args) {
     args = checkArgs(2, args, 'make');
 
     switch (args[0]) { // validate type
-        case 'command':
         case 'player':
         case 'global':
             error(19, []); return;
+        case 'command':
         case 'room':
-            args[0] = 'rooms';
-            break;
         case 'item':
-            args[0] = 'items';
-            break;
+            args[0] += 's';
         case 'dummy':
             break;
         default: error(20, [args[0]]); return;
@@ -249,4 +246,8 @@ export function make(args) {
         current[pathParts[next]] = current[pathParts[next]] ?? {};
         current = current[pathParts[next]];
     }
+}
+export function destroy(args) {
+    args = checkArgs(1, args, 'destroy');
+
 }

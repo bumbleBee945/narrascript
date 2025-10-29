@@ -533,7 +533,7 @@ export function error(code, info) {
         case 18: // object already exists
             errorMsg = "Object '"+info[0]+"' already exists"; break;
         case 19: // cannot create object type
-            errorMsg = "Cannot create object of type (player, global, command)"; break;
+            errorMsg = "Cannot create object of type (player, global)"; break;
         case 20: // unknown object type
             errorMsg = "Unknown object type '"+info[0]+"'"; break;
         /*case 18: // 
