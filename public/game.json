@@ -7,7 +7,6 @@
             "@test": ""
         },
         "global": {
-            "@effects": "set(#lol, 0);"
         },
         "rooms": {
             "room_cell": {
@@ -23,12 +22,6 @@
             "open_door": {}
         },
         "commands": {
-            "test": {
-                "@effects": " set(#three, add(2, 1)); make(dummy, objDummy); setProperty(dummy/objDummy, @lol, #three); display(getProperty(dummy/objDummy, @lol));"
-            },
-            "check": {
-                "@effects": "if(not(isset(#lol))) { display(variable is not set.); } else { display(variable is #lol.); if(equals(#lol, 5)) { display(\\(equal to five\\)); } else { if(greater(#lol, 5)) { display(\\(greater than five\\)); } else { display(\\(less than five\\)); } } }"
-            },
             "set": {
                 "@effects": "if(isset(#lol)) { display(the variable is already set.); } else { set(#lol, 0); }"
             },

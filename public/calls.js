@@ -11,7 +11,7 @@ Imports from state.js, calls.js
 // Imports
 
 import { gameState, setError, displayDiv, runtimeError, setPlain, plainDisplay } from "./state.js";
-import { checkArgs, error, retrieve, setVar, findObj, getVar, toNumber } from "./logic.js";
+import { checkArgs, error, retrieve, findObj, setVar, getVar, deleteVar, toNumber } from "./logic.js";
 
 // Code Scoped Functions
 
@@ -212,29 +212,21 @@ export function set(args) {
 }
 export function inc(args) {
     args = checkArgs(1, args, 'inc');
+    if (getVar(args[0]) === undefined) { error(5, [args[0]]); return; }
     setVar(args[0],
         toNumber(getVar(args[0]), 'inc') + 1);
 }
 export function dec(args) {
     args = checkArgs(1, args, 'dec');
+    if (getVar(args[0]) === undefined) { error(5, [args[0]]); return; }
     setVar(args[0],
         toNumber(getVar(args[0]), 'dec') - 1);
 }
 export function make(args) {
     args = checkArgs(2, args, 'make');
 
-    switch (args[0]) { // validate type
-        case 'player':
-        case 'global':
-            error(19, []); return;
-        case 'command':
-        case 'room':
-        case 'item':
-            args[0] += 's';
-        case 'dummy':
-            break;
-        default: error(20, [args[0]]); return;
-    }
+    args[0] = modifiable(args[0]);
+    if (!args[0]) return;
 
     const pathParts = [args[0], ...args[1].split('/')];
     // check it exists
@@ -249,5 +241,43 @@ export function make(args) {
 }
 export function destroy(args) {
     args = checkArgs(1, args, 'destroy');
+    const pathParts = args[0].split('/');
 
+    pathParts[0] = modifiable(pathParts[0]);
+    if (!pathParts[0]) return;
+
+    let obj = findObj(args[0]);
+    if (obj === undefined) return;
+
+    for (let next = 0; next < pathParts.length - 1; next++) {
+        current = current[pathParts[next]];
+    }
+
+    delete current[pathParts[pathParts.length - 1]];
+}
+function modifiable(type) {
+    switch (type) { // validate type
+        case 'player':
+        case 'global':
+            error(19, []); return false;
+        case 'command':
+        case 'room':
+        case 'item':
+            type += 's';
+        case 'commands':
+        case 'rooms':
+        case 'items':
+        case 'dummy':
+            return type;
+        default: error(20, [args[0]]); return false;
+    } 
+}
+export function wait(args) {
+    checkArgs(1, args, 'wait', 'num');
+    sleep(args[0] * 1000);
+}
+export function deleteCall(args) {
+    checkArgs(1, args, 'delete');
+    if (getVar(args[0]) === undefined) { error(5, [args[0]]); return; }
+    deleteVar(args[0]);
 }

@@ -60,6 +60,7 @@ export function runGlobal() {
     cLog('global run');
 }
 function runEffects(fullStr, manageScope = true) {
+    if (fullStr === undefined) return;
     cLog('running effects starting with '+fullStr.substring(0, 50)+'...');
     if (manageScope) upScope();
     let char = '';
@@ -112,7 +113,7 @@ function runEffects(fullStr, manageScope = true) {
         error(10, [fullStr]); // unbalanced parantheses
     else if (currentCall !== '')
         runActionCall(currentCall); // trailing characters
-    cLog('finished effects starting with '+fullStr.substring(0, 15)+'...');
+    cLog('finished effects starting with '+fullStr.substring(0, 50)+'...');
 }
 
 function runBlock(fullStr, cursor, currentCall) {
@@ -154,7 +155,13 @@ function runActionCall(call) {
     let args = call.substring(call.indexOf('(') + 1);
     args = args.slice(0, -1);
     // if set(), dont parse first value
-    args = parseArgs(args, (callName === 'set' ? 1 : 0));
+    let minValue = 0;
+    switch (callName) {
+        case 'set':
+        case 'delete':
+            minValue = 1;
+    }
+    args = parseArgs(args, minValue);
     // args -> parsed array w/ vars replaced
 
     switch (callName) {
@@ -162,16 +169,14 @@ function runActionCall(call) {
         case 'move': Calls.move(args); break;
         case 'addItem': Calls.addItem(args); break;
         case 'deleteItem': Calls.deleteItem(args); break;
-        case 'setProperty' : Calls.setProperty(args); break;
-        case 'set': 
-            Calls.set(args);
-            break;
-        case 'inc' : Calls.inc(args); break;
-        case 'dec' : Calls.dec(args); break;
-        case 'make' : Calls.make(args); break;
-        //case '' : (args); break;
-        //case '' : (args); break;
-        //case '' : (args); break;
+        case 'setProperty': Calls.setProperty(args); break;
+        case 'set': Calls.set(args); break;
+        case 'inc': Calls.inc(args); break;
+        case 'dec': Calls.dec(args); break;
+        case 'make': Calls.make(args); break;
+        case 'destroy': Calls.destroy(args); break;
+        case 'wait': Calls.wait(args); break;
+        case 'delete': Calls.deleteCall(args); break;
         //case '' : (args); break;
         //case '' : (args); break;
         default: error(12, [callName]);
@@ -239,7 +244,7 @@ function getBlock(cursor, string) {
 
     return block;
 }
-function evaluate(givenValue, minParse = 0) {
+function evaluate(givenValue, minParse) {
     givenValue = (givenValue+'').trim();
     const parts = givenValue.match(/^([a-zA-Z_]+)\((.*)\)$/);
 
@@ -252,21 +257,27 @@ function evaluate(givenValue, minParse = 0) {
     //evaluate each arg recursively
     let evaluatedArgs = [];
     for (let i = 0; i < args.length; i++) {
-        evaluatedArgs[i] = evaluate(args[i], minParse);
+        evaluatedArgs[i] = evaluate(args[i]);
     }
 
     return runReturnCall(returnCall, evaluatedArgs);
 }
 function parseArgs(args, minParse = 0) {
-    cLog('|---> parsing args '+args);
+    cLog('|---> parsing args '+args+ ' (minVal '+minParse+')');
     //args is 'sqrt(4), #two, Two'
     args = splitArgs(args);
-    if (args[0].startsWith('isset')) { minParse = 1; }
     //args is ['sqrt(4)', '#two', 'Two']
+    let nextMinParse = 0;
+    const callName = args[0].split('(')[0];
+    switch (callName) {
+        case 'isset':
+        case 'delete':
+            nextMinParse = 1;
+    }
     for (let i = 0; i < args.length; i++) {
         if (i >= minParse) {
-            args[i] = parseValue(args[i]); minParse = 0; }
-        args[i] = evaluate(args[i], minParse);
+            args[i] = parseValue(args[i]); }
+        args[i] = evaluate(args[i], nextMinParse);
     }
     //args is [2, 2, 'Two']
     return args;
@@ -391,6 +402,14 @@ export function getVar(name) {
     }
     cLog('|-------> could not find '+name);
     return undefined;
+}
+export function deleteVar(varName) {
+        for (let i = scope.length - 1; i >= 0; i--) {
+        if (varName in scope[i]) {
+            delete scope[i][varName];
+            cLog('|---------> deleted var '+varName);
+        }
+    }
 }
 export function findObj(obj) {
     const result = retrieve(obj.split("/"), true);
@@ -532,8 +551,8 @@ export function error(code, info) {
             errorMsg = "Cannot find property '"+info[0]+"' in object '"+info[1]+"'."; break;
         case 18: // object already exists
             errorMsg = "Object '"+info[0]+"' already exists"; break;
-        case 19: // cannot create object type
-            errorMsg = "Cannot create object of type (player, global)"; break;
+        case 19: // cannot make/destroy object type
+            errorMsg = "Cannot make or destroy object of type (player, global)"; break;
         case 20: // unknown object type
             errorMsg = "Unknown object type '"+info[0]+"'"; break;
         /*case 18: // 
