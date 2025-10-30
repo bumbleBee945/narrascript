@@ -7,7 +7,7 @@
             "@test": ""
         },
         "global": {
-            "@effects": "set(#testNum, 1); function(testFunction) { inc(#testNum); display(inc-ed); }"
+            "@effects": "set(#testNum, 1); function(testFunction, $arg1, $text) { loop($arg1) { inc(#testNum); display(inc-ed $text); } }"
         },
         "rooms": {
             "room_cell": {
@@ -30,7 +30,7 @@
                 "@effects": ""
             },
             "test": {
-                "@effects": "testFunction();"
+                "@effects": "testFunction(2, haha);"
             },
             "set": {
                 "@effects": "if(isset(#lol)) { display(the variable is already set.); } else { set(#lol, 0); }"

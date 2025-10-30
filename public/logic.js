@@ -196,7 +196,7 @@ function runBlockCall(call, blockContent, secondaryContent = null) {
     let innerStart = call.indexOf('(') + 1;
     let innerEnd = call.lastIndexOf(')');
     let innerContent = call.substring(innerStart, innerEnd);
-    let innerParsed = parseArgs(innerContent)[0];
+    let innerParsed = (callName !== 'function' ? parseArgs(innerContent)[0] : '')
     switch (callName) {
         case 'if':
             if (toBoolean(innerParsed)) {
@@ -228,8 +228,6 @@ function runBlockCall(call, blockContent, secondaryContent = null) {
                 // run arg z
                 runEffects(forArgs[2]+';', false);
             } return;
-        case 'f':
-        case 'func':
         case 'function':
             // create the function
             Calls.createFunction(splitArgs(innerContent), blockContent);
