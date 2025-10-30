@@ -59,7 +59,7 @@ export function runGlobal() {
     runEffects(gameBase['main']['global']['@effects'], false);
     cLog('global run');
 }
-function runEffects(fullStr, manageScope = true) {
+export function runEffects(fullStr, manageScope = true) {
     if (fullStr === undefined) return;
     cLog('running effects starting with '+fullStr.substring(0, 50)+'...');
     if (manageScope) upScope();
@@ -159,6 +159,8 @@ function runActionCall(call) {
     switch (callName) {
         case 'set':
         case 'delete':
+        case 'inc':
+        case 'dec':
             minValue = 1;
     }
     args = parseArgs(args, minValue);
@@ -179,7 +181,10 @@ function runActionCall(call) {
         case 'delete': Calls.deleteCall(args); break;
         //case '' : (args); break;
         //case '' : (args); break;
-        default: error(12, [callName]);
+        default:
+            // check for custom functions
+            if (isFunction(callName)) { Calls.runFunction(callName, args); break; }
+            error(12, [callName]);
     }
 }
 function runBlockCall(call, blockContent, secondaryContent = null) {
@@ -188,24 +193,55 @@ function runBlockCall(call, blockContent, secondaryContent = null) {
     if (!validateCall(call, blockContent)) return;
     const callName = call.split('(')[0].trim();
 
+    let innerStart = call.indexOf('(') + 1;
+    let innerEnd = call.lastIndexOf(')');
+    let innerContent = call.substring(innerStart, innerEnd);
+    let innerParsed = parseArgs(innerContent)[0];
     switch (callName) {
         case 'if':
-            // get condition
-            let condStart = call.indexOf('(') + 1;
-            let condEnd = call.lastIndexOf(')');
-            let condition = call.substring(condStart, condEnd);
-            let result = parseArgs(condition)[0];
-            // result is now true/false
-            if (toBoolean(result)) runEffects(blockContent);
-            else if (secondaryContent !== null) runEffects(secondaryContent);
-            break;
+            if (toBoolean(innerParsed)) {
+                runEffects(blockContent);
+            } else if (secondaryContent !== null) {
+                runEffects(secondaryContent);
+            } return;
+        case 'while':
+            // while innerContent is true after parsing
+            while (toBoolean(innerParsed)) {
+                runEffects(blockContent);
+                innerParsed = parseArgs(innerContent)[0];
+            } return;
+        case 'loop':
+            // get amount
+            const loopNum = toNumber(innerParsed, 'loop');
+            for (let i = 0; i < loopNum; i++) {
+                runEffects(blockContent);
+            } return;
+        case 'for':
+            // get forArgs (x, y, z)
+            forArgs = splitArgs(innerContent);
+            // run arg x
+            runEffects(forArgs[0]+';', false);
+            // while arg y
+            while(toBoolean(parseArgs(forArgs[1]))) {
+                // run code
+                runEffects(blockContent);
+                // run arg z
+                runEffects(forArgs[2]+';', false);
+            } return;
+        case 'f':
+        case 'func':
+        case 'function':
+            // create the function
+            Calls.createFunction(splitArgs(innerContent), blockContent);
+            return;
     }
+    error(12, [callName]);
 }
 function runReturnCall(callName, args) {
     cLog('|-> runnin '+callName+' with args ('+args+')');
     switch (callName) {
         case 'and': case 'or': case 'xor': case 'not':
-        case 'equals': case 'greater': case 'isset':
+        case 'equals': case 'greater': case 'isset': case 'isSet':
             return Calls.simple(callName, args); // basic ones
         case 'add': case 'sub': case 'mult': case 'div':
         case 'mod': case 'pow': case 'sqrt': case 'abs':
@@ -216,6 +252,7 @@ function runReturnCall(callName, args) {
         case 'trim': case 'length': case 'repeat': case 'size':
         case 'replace': case 'charAt': case 'indexOf':
         case 'toUpper': case 'toLower': case 'replaceAll':
+        case 'includes': case 'startsWith': case 'contains':
             return Calls.stringManip(callName, args); // strings
         case 'hasItem': return Calls.hasItem(args);
         case 'getProperty': return Calls.getProperty(args);
@@ -270,7 +307,7 @@ function parseArgs(args, minParse = 0) {
     let nextMinParse = 0;
     const callName = args[0].split('(')[0];
     switch (callName) {
-        case 'isset':
+        case 'isset': case 'isSet':
         case 'delete':
             nextMinParse = 1;
     }
@@ -307,6 +344,12 @@ function splitArgs(string) {
 }
 
 // Variable Functions
+
+
+export function isFunction(name) {
+    if (getVar('func/'+name+'/code', true) === undefined) return false;
+    return true;
+}
 
 export function retrieve(path = [], suppress = false) {
 
@@ -378,9 +421,10 @@ function parseValue(string) {
     return result; // return parsed string
 }
 export function setVar(varName, value) {
-    if (!varName.startsWith('$') && !varName.startsWith('#')) {
+    cLog('|---------> setting var '+varName+' to '+value);
+    if (!varName.startsWith('$') && !varName.startsWith('#') && !varName.startsWith('func')) {
         error(15, [varName]); return; }
-    if (getVar(varName) === undefined) {
+    if (getVar(varName, true) === undefined) {
         scope[scope.length - 1][varName] = value;
         cLog('|---------> set var '+varName+' to '+value+' in scope '+(scope.length - 1));
         return;
@@ -392,13 +436,15 @@ export function setVar(varName, value) {
         }
     }
 }
-export function getVar(name) {
+export function getVar(name, suppressReserved = false) {
+    cLog('|-------> searching for '+name+' ('+suppressReserved+')');
     // search from top to bottom
+    if (name.startsWith('func') && !suppressReserved) { error(21, [name]); return undefined; }
     for (let i = scope.length - 1; i >= 0; i--) {
         if (name in scope[i]) {
             cLog('|-------> found '+name+' in scope '+i);
             return scope[i][name];
-            }
+        }
     }
     cLog('|-------> could not find '+name);
     return undefined;
@@ -419,11 +465,11 @@ export function findObj(obj) {
 
 // Scope Manipulation
 
-function upScope() {
+export function upScope() {
     scope.push({});
     cLog('upscope, current depth '+(scope.length-1));
 }
-function downScope() {
+export function downScope() {
     scope.pop();
     cLog('downscope, current depth '+(scope.length-1));
 }
@@ -475,10 +521,6 @@ export function addSaves() {
 
 function validateCall(call, blockContent = null) {
     
-    //check that if isnt missing block
-    if (call.startsWith('if(') && blockContent === null) {
-        error(7, [call]); return false;
-    }
     //check for ( after call
     if (!call.includes('(')) {
         error(8, [call]); return false;
@@ -510,7 +552,7 @@ export function checkArgs(expectedArgs, givenArgs, callName, type = 'string') {
     return givenArgs;
 }
 export function error(code, info) {
-    cLog('error '+code);
+    cLog('!!! error '+code+' !!!');
     let errorMsg = 'internal error (eMe) ['+code+'], ['+JSON.stringify(info)+']'
     switch (code) {
         case 0: // wrong call argument amount (call, expected, given)
@@ -550,20 +592,26 @@ export function error(code, info) {
         case 17: // cant find property
             errorMsg = "Cannot find property '"+info[0]+"' in object '"+info[1]+"'."; break;
         case 18: // object already exists
-            errorMsg = "Object '"+info[0]+"' already exists"; break;
+            errorMsg = "Object '"+info[0]+"' already exists."; break;
         case 19: // cannot make/destroy object type
-            errorMsg = "Cannot make or destroy object of type (player, global)"; break;
+            errorMsg = "Cannot make or destroy object of type (player, global)."; break;
         case 20: // unknown object type
-            errorMsg = "Unknown object type '"+info[0]+"'"; break;
-        /*case 18: // 
+            errorMsg = "Unknown object type '"+info[0]+"'."; break;
+        case 21: // reserved
+            errorMsg = "Keyword '"+info[0]+"' is internally reserved, please pick another keyword."; break;
+        case 22: // nameless function
+            errorMsg = "Cannot create a nameless function."; break;
+        case 23: // function already exists
+            errorMsg = "Function '"+info[0]+"' already exists."; break;
+        /*case 22: // 
             errorMsg = ""; break;*/
-        /*case 18: // 
+        /*case 22: // 
             errorMsg = ""; break;*/
     }
     setError('[!] Error: '+errorMsg);
 }
 
-function cLog(str) {
+export function cLog(str) {
     let result = '';
     for (let i = 0; i < scope.length-1; i++)
         result += '\t';

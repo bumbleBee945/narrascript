@@ -11,7 +11,7 @@ Imports from state.js, calls.js
 // Imports
 
 import { gameState, setError, displayDiv, runtimeError, setPlain, plainDisplay } from "./state.js";
-import { checkArgs, error, retrieve, findObj, setVar, getVar, deleteVar, toNumber } from "./logic.js";
+import { checkArgs, error, retrieve, findObj, setVar, getVar, deleteVar, toNumber, runEffects, isFunction, upScope, downScope, cLog } from "./logic.js";
 
 // Code Scoped Functions
 
@@ -34,7 +34,8 @@ export function simple(call, args) { // (and,or,xor,not,equals,greater,isset)
         case 'not': args = checkArgs(1, args, 'not', 'bool'); return !args[0];
         case 'equals': args = checkArgs(2, args, 'equals'); return args[0] === args[1];
         case 'greater': args = checkArgs(2, args, 'greater', 'num'); return args[0] > args[1];
-        case 'isset': args = checkArgs(1, args, 'isset'); return (getVar(args[0]) !== undefined);
+        case 'isset': case 'isSet':
+            args = checkArgs(1, args, 'isset'); return (getVar(args[0]) !== undefined);
         default: display('internal error (no simple) ['+call+']'); return false;
     }
 }
@@ -80,7 +81,7 @@ export function math(call, args) { // all math
 }
 export function hasItem(args) {
     args = checkArgs(1, args, 'hasItem');
-    console.log(args[0]);
+    cLog(args[0]);
     let items = retrieve(['player', '@inventory']).split(',');
     for (let i = 0; i < items.length; i++)
         if (items[i].trim() === args[0].trim()) return true;
@@ -142,6 +143,13 @@ export function stringManip(call, args) {
             args[1] = checkArgs(1, args[1], 'charAt', 'num')[0];
 
             return args[0].charAt(args[1]);
+        case 'includes': case 'contains':
+            args = checkArgs(2, args, call);
+            return args[0].includes(args[1]);
+        case 'startsWith':
+            args = checkArgs(2, args, 'startsWith');
+            return args[0].startsWith(args[1]);
+
     }
 }
 
@@ -207,6 +215,7 @@ export function setProperty(args) {
 }
 export function set(args) {
     args = checkArgs(2, args, 'set');
+    if (args[1] === 'func') { error(21, [args[0]]); return; }
 
     setVar(args[0], args[1]);
 }
@@ -280,4 +289,36 @@ export function deleteCall(args) {
     checkArgs(1, args, 'delete');
     if (getVar(args[0]) === undefined) { error(5, [args[0]]); return; }
     deleteVar(args[0]);
+}
+export function createFunction(args, content) {
+    // name, [arg references], content
+    const name = args[0];
+    cLog('|-> creating function '+name+' with args ['+args+']');
+    if (isFunction(name)) { error(23, [name]); return; }
+    setVar('func/'+name+'/code', content);
+    // set func/name/code to content
+    let argArray = [];
+    for (let i = 1; i < args.length; i++) {
+        argArray[i-1] = args[i];
+    }
+    // argArray[1, 2, 3] = arg references
+    cLog('setting /args to '+argArray);
+    setVar('func/'+name+'/args', argArray);
+    // set func/name/args to argArray
+}
+export function runFunction(name, args) {
+    // get expected number of arguments
+    const expectArgNum = getVar('func/'+name+'/args', true).length;
+    // checkArgs
+    let funcArgs = [];
+    if (!(args[0] === '' && expectArgNum === 0))
+        funcArgs = checkArgs(expectArgNum, args, name);
+    upScope();
+    // set [reference] to the ith given arg
+    for (let i = 0; i < funcArgs.length; i++) {
+        setVar(getVar('func/'+name+'/args', true)[i], funcArgs[i]);
+    }
+    // run associated code
+    runEffects(getVar('func/'+name+'/code', true), false);
+    downScope();
 }

@@ -7,6 +7,7 @@
             "@test": ""
         },
         "global": {
+            "@effects": "set(#testNum, 1); function(testFunction) { inc(#testNum); display(inc-ed); }"
         },
         "rooms": {
             "room_cell": {
@@ -22,6 +23,15 @@
             "open_door": {}
         },
         "commands": {
+            "check": {
+                "@effects": "display(#testNum);"
+            },
+            "make": {
+                "@effects": ""
+            },
+            "test": {
+                "@effects": "testFunction();"
+            },
             "set": {
                 "@effects": "if(isset(#lol)) { display(the variable is already set.); } else { set(#lol, 0); }"
             },
