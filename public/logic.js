@@ -1,7 +1,7 @@
 /*
 
 Narrascript Logic File (./public/logic.js)
-Last updated 10/24/25 by Avery Olsen
+Last updated 11/12/25 by Avery Olsen
 
 Logic JavaScript file; parsing, variable substitution, everything but calls
 Imports from state.js, calls.js
@@ -106,14 +106,16 @@ export function runEffects(fullStr, manageScope = true) {
 
     }
 
-    if (manageScope) downScope();
 
     // error check
     if (depth !== 0)
         error(10, [fullStr]); // unbalanced parantheses
     else if (currentCall !== '')
         runActionCall(currentCall); // trailing characters
+
+    if (manageScope) downScope();
     cLog('finished effects starting with '+fullStr.substring(0, 50)+'...');
+
 }
 
 function runBlock(fullStr, cursor, currentCall) {
@@ -158,6 +160,7 @@ function runActionCall(call) {
     let minValue = 0;
     switch (callName) {
         case 'set':
+        case 'setList':
         case 'delete':
         case 'inc':
         case 'dec':
@@ -168,6 +171,7 @@ function runActionCall(call) {
 
     switch (callName) {
         case 'display': Calls.display(args); break;
+        case 'print': Calls.print(args); break;
         case 'move': Calls.move(args); break;
         case 'addItem': Calls.addItem(args); break;
         case 'deleteItem': Calls.deleteItem(args); break;
@@ -179,7 +183,9 @@ function runActionCall(call) {
         case 'destroy': Calls.destroy(args); break;
         case 'wait': Calls.wait(args); break;
         case 'delete': Calls.deleteCall(args); break;
-        //case '' : (args); break;
+        case 'setList' : Calls.setListCall(args); break;
+        case 'push' : Calls.push(args); break;
+        case 'pop' : Calls.pop(args); break;
         //case '' : (args); break;
         default:
             // check for custom functions
@@ -196,7 +202,7 @@ function runBlockCall(call, blockContent, secondaryContent = null) {
     let innerStart = call.indexOf('(') + 1;
     let innerEnd = call.lastIndexOf(')');
     let innerContent = call.substring(innerStart, innerEnd);
-    let innerParsed = (callName !== 'function' ? parseArgs(innerContent)[0] : '')
+    let innerParsed = (callName !== 'function' && callName !== 'for' ? parseArgs(innerContent)[0] : '')
     switch (callName) {
         case 'if':
             if (toBoolean(innerParsed)) {
@@ -218,11 +224,11 @@ function runBlockCall(call, blockContent, secondaryContent = null) {
             } return;
         case 'for':
             // get forArgs (x, y, z)
-            forArgs = splitArgs(innerContent);
+            const forArgs = splitArgs(innerContent);
             // run arg x
             runEffects(forArgs[0]+';', false);
             // while arg y
-            while(toBoolean(parseArgs(forArgs[1]))) {
+            while(toBoolean(parseArgs(forArgs[1])[0])) {
                 // run code
                 runEffects(blockContent);
                 // run arg z
@@ -238,7 +244,7 @@ function runBlockCall(call, blockContent, secondaryContent = null) {
 function runReturnCall(callName, args) {
     cLog('|-> runnin '+callName+' with args ('+args+')');
     switch (callName) {
-        case 'and': case 'or': case 'xor': case 'not':
+        case 'and': case 'or': case 'xor': case 'not': case 'lesser':
         case 'equals': case 'greater': case 'isset': case 'isSet':
             return Calls.simple(callName, args); // basic ones
         case 'add': case 'sub': case 'mult': case 'div':
@@ -305,8 +311,7 @@ function parseArgs(args, minParse = 0) {
     let nextMinParse = 0;
     const callName = args[0].split('(')[0];
     switch (callName) {
-        case 'isset': case 'isSet':
-        case 'delete':
+        case 'isset': case 'isSet': case 'set':
             nextMinParse = 1;
     }
     for (let i = 0; i < args.length; i++) {
@@ -329,8 +334,8 @@ function splitArgs(string) {
             currentArg += string[i+1];
             i++; continue;
         }
-        if (char === '(') depth++;
-        if (char === ')') depth--;
+        if (char === '(' || char === '[') depth++;
+        if (char === ')' || char === ']') depth--;
         if (char === ',' && depth === 0) {
             args.push(currentArg.trim());
             currentArg = '';
@@ -378,7 +383,7 @@ export function retrieve(path = [], suppress = false) {
     //return state if exists, or base
     return (foundState ? valueState : valueBase);
 }
-function parseValue(string) {
+export function parseValue(string) {
     cLog('|-----> parsing value '+string);
 
     let result = '';
@@ -398,9 +403,31 @@ function parseValue(string) {
             result += string[i]; // add to result
             continue;
         } else if (char === '$' || char === '#') { // variable start
-            inVar = true; currentVar = char;
-            cLog('|-------> searching for '+string.substring(i));
-            continue; //
+            if (string[i+1] !== '_') { // normal
+                inVar = true; currentVar = char;
+                cLog('|-------> searching for '+string.substring(i));
+                continue; //
+            } // list
+            const afterPrefix = string.substring(i+1);
+
+            if (!afterPrefix.includes('[')) { error(25, [afterPrefix]); return; }
+
+            const list = '$'+afterPrefix.split('[')[0];
+            const afterList = afterPrefix.split('[')[1];
+
+            if (!afterList.includes(']')) { error(26, [afterList]); return; }   
+
+            const listKey = parseValue(afterList.split(']')[0]);
+
+            if (getVar(list) === undefined) { error(5, [list]); return; }
+            if (!Array.isArray(getVar(list))) { error (28, [list]); return; }
+            if (getVar(list)[listKey] === undefined) { error(27, [listKey, list]); return; }
+
+            cLog('|-------> found element '+listKey+' in list '+list+' ('+getVar(list)[listKey]+')');
+
+            result += getVar(list)[listKey];
+            i += 2 + list.length + listKey.length;
+            continue;
         }
 
         if (inVar) { // add to var, if exists add value to result
@@ -420,22 +447,37 @@ function parseValue(string) {
 }
 export function setVar(varName, value) {
     cLog('|---------> setting var '+varName+' to '+value);
+
     if (!varName.startsWith('$') && !varName.startsWith('#') && !varName.startsWith('func')) {
         error(15, [varName]); return; }
-    if (getVar(varName, true) === undefined) {
-        scope[scope.length - 1][varName] = value;
-        cLog('|---------> set var '+varName+' to '+value+' in scope '+(scope.length - 1));
-        return;
+
+    let key;
+    if (varName.startsWith('$_')) { // list setting
+        key = varName.split('[')[1].slice(0, -1);
+        varName = varName.split('[')[0];
     }
-    for (let i = scope.length - 1; i >= 0; i--) {
-        if (varName in scope[i]) {
-            scope[i][varName] = value;
-            cLog('|---------> set var '+varName+' to '+value+' in scope '+i);
-        }
+
+    let scopeNum = scope.length - 1; // default to highest scope
+
+    if (getVar(varName, true) !== undefined) // variable exists
+        for (let i = scope.length - 1; i >= 0; i--)
+            if (varName in scope[i]) // find variable
+                scopeNum = i;
+
+    if (varName.startsWith('$_')) { // list
+        scope[scopeNum][varName] ??= [];
+        scope[scopeNum][varName][key] = value;
+    } else {
+        scope[scopeNum][varName] = value;
+        cLog('|---------> set var '+varName+' to '+value+' in scope '+scopeNum);
     }
 }
+export function setList(listName, elements) {
+    const scopeNum = scope.length - 1;
+    scope[scopeNum][listName] = elements;
+}
 export function getVar(name, suppressReserved = false) {
-    cLog('|-------> searching for '+name+' ('+suppressReserved+')');
+    cLog('|-------> searching for '+name+(suppressReserved ? ' (suppressed)':''));
     // search from top to bottom
     if (name.startsWith('func') && !suppressReserved) { error(21, [name]); return undefined; }
     for (let i = scope.length - 1; i >= 0; i--) {
@@ -451,13 +493,13 @@ export function deleteVar(varName) {
         for (let i = scope.length - 1; i >= 0; i--) {
         if (varName in scope[i]) {
             delete scope[i][varName];
-            cLog('|---------> deleted var '+varName);
+            cLog('|---------> deleted var '+varName+' in scope '+i);
         }
     }
 }
-export function findObj(obj) {
+export function findObj(obj, suppressError = false) {
     const result = retrieve(obj.split("/"), true);
-    if (result === false) { error(16, [obj]); return; }
+    if (result === false && !suppressError) { error(16, [obj]); return undefined; }
     return result;
 }
 
@@ -474,7 +516,8 @@ export function downScope() {
 
 // Type Conversion
 
-export function toBoolean(given, callName) {
+export function toBoolean(given, callName = 'call not given') {
+    cLog('to Boolean on ['+given+'] ('+typeof given+') for '+callName);
     if (typeof given === 'boolean') return given;
     if (typeof given === 'number') return given !== 0;
     if (typeof given === 'string') {
@@ -484,7 +527,7 @@ export function toBoolean(given, callName) {
         if (!Number.isNaN(Number(given))) return Number(given) !== 0;
         error(13, [given, callName]); return false;
     }
-    error(14, [callName, typeof given]); return false;
+    error(13, [given, callName]); return false;
 }
 export function toNumber(given, callName) {
     let original = given;
@@ -503,6 +546,7 @@ export async function resetCache() {
     localStorage.removeItem('savedState');
     localStorage.removeItem('savedScope');
     localStorage.removeItem('savedDisplay');
+    localStorage.removeItem('uploadedGame');
     localStorage.setItem('cacheBust', Date.now());
     location.reload();
 }
@@ -517,7 +561,7 @@ export function addSaves() {
 
 // Error Handling
 
-function validateCall(call, blockContent = null) {
+function validateCall(call) {
     
     //check for ( after call
     if (!call.includes('(')) {
@@ -601,6 +645,22 @@ export function error(code, info) {
             errorMsg = "Cannot create a nameless function."; break;
         case 23: // function already exists
             errorMsg = "Function '"+info[0]+"' already exists."; break;
+        case 24: // no @ starting property
+            errorMsg = "Properties must be prefixed by '@' (Tried to set '"+info[0]+"/"+info[1]+"' to '"+info[2]+"')"; break;
+        case 25: // invalid list
+            errorMsg = "Invalid list: '"+info[0]+"'."; break;
+        case 26: // list has no ]
+            errorMsg = "List keys must end with ]: '"+info[0]+"'."; break;
+        case 27: // cant find element in list
+            errorMsg = "Cannot find element '"+info[0]+"' in list '"+info[1]+"'."; break;
+        case 28: // not a list
+            errorMsg = "Variable '"+info[0]+"' is not of type list"; break;
+        case 29: // 
+            errorMsg = "List must be passed as [element, element, element], received '"+info[0]+"'."; break;
+        case 30: // popped empty
+            errorMsg = "Tried to pop an empty list ('"+info[0]+"')."; break;
+        /*case 22: // 
+            errorMsg = ""; break;*/
         /*case 22: // 
             errorMsg = ""; break;*/
         /*case 22: // 

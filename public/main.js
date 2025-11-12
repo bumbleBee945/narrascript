@@ -1,7 +1,7 @@
 /*
 
 Narrascript Main File (./public/main.js)
-Last updated 10/24/25 by Avery Olsen
+Last updated 11/12/25 by Avery Olsen
 
 Main JavaScript file; session load/save, initialization, overall control flow.
 Imports from logic.js, calls.js, state.js
@@ -17,37 +17,68 @@ import { runGlobal, parseInput, resetCache, addSaves } from "./logic.js";
 import { display, currentRoomBody } from "./calls.js";
 
 // HTML Element Bindings, Listeners
+setDisplay(document.getElementById('display'));
+
+const loaderPanel = document.getElementById('gameLoader');
+const shell = document.getElementById('gameShell');
+const filePicker = document.getElementById('gameFilePicker');
+const btnFileStart = document.getElementById('gameFileUse');
+const storedGame = localStorage.getItem('uploadedGame');
 
 const textInput = document.getElementById('textInput');
 const formInput = document.getElementById('formInput');
-setDisplay(document.getElementById('display'));
 const resetButton = document.getElementById('resetButton');
 
 resetButton.addEventListener("click", resetCache);
 formInput.addEventListener("submit", getInput);
 
+btnFileStart.addEventListener('click', async () => {
+    const file = filePicker.files?.[0];
+    if (!file) { alert('Upload a game file first.'); return; }
+
+    try {
+        const text = await file.text();
+        const parsed = JSON.parse(text);
+        localStorage.setItem('uploadedGame', text);
+        bootstrapGame(parsed);
+    } catch (err) {
+        alert('Invalid game file JSON: ' + err.message);
+    }
+});
+
+
 // Initialization
 
-const cacheBust = localStorage.getItem('cacheBust') || '';
-setBase(await (await fetch(`game.json?cacheBust=${cacheBust}`)).json());
-setState({ 'main': { 'player': gameBase['main']['player'] } });
-setReset(false);
+if (storedGame) {
+    btnFileStart.style.display = 'flex';
+    bootstrapGame(JSON.parse(storedGame));
+} else {
+    loaderPanel.style.display = 'flex';
+}
 
-// Session Saving, Restoring
+async function bootstrapGame(gameData) {
+    setBase(gameData);
+    setState({ 'main': { 'player': gameBase['main']['player'] } });
+    setReset(false);
 
-const savedDisplay = localStorage.getItem('savedDisplay');
-if (savedDisplay) setPlain(savedDisplay); display(-1);
-const savedState = localStorage.getItem('savedState');
-if (savedState) setState(JSON.parse(savedState));
-const savedScope = localStorage.getItem('savedScope');
-if (savedScope) setScope(JSON.parse(savedScope));
-addSaves();
+    // Session Saving, Restoring
+    const savedDisplay = localStorage.getItem('savedDisplay');
+    if (savedDisplay) setPlain(savedDisplay); display(-1);
+    const savedState = localStorage.getItem('savedState');
+    if (savedState) setState(JSON.parse(savedState));
+    const savedScope = localStorage.getItem('savedScope');
+    if (savedScope) setScope(JSON.parse(savedScope));
+    addSaves();
+
+    shell.style.display = 'flex';
+    loaderPanel.style.display = 'none';
+
+    textInput.focus();
+    if (!savedDisplay) display(currentRoomBody());
+    runGlobal();
+}
 
 // Game Code
-
-textInput.focus();
-if (!savedDisplay) display(currentRoomBody());
-runGlobal();
 
 function getInput(event) {
     event.preventDefault();

@@ -1,7 +1,7 @@
 /*
 
 Narrascript Logic File (./public/logic.js)
-Last updated 10/24/25 by Avery Olsen
+Last updated 11/12/25 by Avery Olsen
 
 Logic JavaScript file; parsing, variable substitution, everything but calls
 Imports from state.js, calls.js
@@ -11,7 +11,7 @@ Imports from state.js, calls.js
 // Imports
 
 import { gameState, setError, displayDiv, runtimeError, setPlain, plainDisplay } from "./state.js";
-import { checkArgs, error, retrieve, findObj, setVar, getVar, deleteVar, toNumber, runEffects, isFunction, upScope, downScope, cLog } from "./logic.js";
+import { checkArgs, error, retrieve, findObj, setVar, getVar, deleteVar, toNumber, runEffects, isFunction, upScope, downScope, cLog, setList, parseValue } from "./logic.js";
 
 // Code Scoped Functions
 
@@ -34,6 +34,7 @@ export function simple(call, args) { // (and,or,xor,not,equals,greater,isset)
         case 'not': args = checkArgs(1, args, 'not', 'bool'); return !args[0];
         case 'equals': args = checkArgs(2, args, 'equals'); return args[0] === args[1];
         case 'greater': args = checkArgs(2, args, 'greater', 'num'); return args[0] > args[1];
+        case 'lesser': args = checkArgs(2, args, 'lesser', 'num'); return args[0] < args[1];
         case 'isset': case 'isSet':
             args = checkArgs(1, args, 'isset'); return (getVar(args[0]) !== undefined);
         default: display('internal error (no simple) ['+call+']'); return false;
@@ -97,7 +98,9 @@ export function getProperty(args) {
     if (!retrieve(obj, true)) { error(16, [args[0]]); return; }
 
     obj.push(args[1]);
-    if (!retrieve(obj, true)) { obj.pop(); error(17, [args[1], obj]); return; }
+    const retrieved = retrieve(obj, true);
+    if (retrieved === false || retrieved === undefined)
+        { obj.pop(); error(17, [args[1], obj]); return; }
 
     return retrieve(obj);
 }
@@ -114,7 +117,7 @@ export function stringManip(call, args) {
             args = checkArgs(1, args, 'trim');
             return args[0].trim();
         case 'length':
-            return size(args);
+            return stringManip('size', args);
         case 'size':
             args = checkArgs(1, args, 'size');
             return args[0].length;
@@ -129,10 +132,10 @@ export function stringManip(call, args) {
             return args[0].indexOf(args[1]);
         case 'toUpper':
             args = checkArgs(1, args, 'toUpper');
-            return args[0].toUpper();
+            return args[0].toUpperCase();
         case 'toLower':
             args = checkArgs(1, args, 'toLower');
-            return args[0].toLower();
+            return args[0].toLowerCase();
         case 'repeat':
             args = checkArgs(2, args, 'repeat');
             args[1] = checkArgs(1, args[1], 'repeat', 'num')[0];
@@ -152,7 +155,14 @@ export function stringManip(call, args) {
 
     }
 }
+export function pop(args) {
+    args = checkArgs(1, args, 'pop');
+    const list = args[0]
+    if (getVar(list) === undefined) { error(5, [list]); return; }
+    if (getVar(list).length === 0) { error(30, [list]); return; }
 
+    return getVar(list).pop();
+}
 
 // Action Calls (display, move, set)
 
@@ -184,6 +194,10 @@ export function display(args, isSpaced = true) {
     displayDiv.appendChild(document.createTextNode(parsed));
     displayDiv.scrollTop = displayDiv.scrollHeight;
 }
+export function print(args) {
+    args = checkArgs(1, args, 'print');
+    display(args[0], false);
+}
 export function move(args) {
     checkArgs(1, args, 'move');
     gameState['main']['player']['@room'] = args[0];
@@ -208,17 +222,42 @@ export function deleteItem(args) {
 }
 export function setProperty(args) {
     args = checkArgs(3, args, 'setProperty');
-    let obj = findObj(args[0]);
+    const [path, property, value] = args;
+    if (property.charAt(0) !== '@') { error(24, args); return; }
+
+    let obj = findObj(path);
     if (obj === undefined) return;
 
-    obj[args[1]] = args[2];
+    obj[property] = value;
 }
 export function set(args) {
     args = checkArgs(2, args, 'set');
-    if (args[1] === 'func') { error(21, [args[0]]); return; }
+    if (args[0].includes('func')) { error(21, [args[0]]); return; }
 
     setVar(args[0], args[1]);
 }
+export function setListCall(args) {
+    args = checkArgs(2, args, 'setList');
+    const list = args[0];
+    if (!list.startsWith('$_')) { error(25, [list]); return; }
+
+    const given = args[1].trim();
+    if (!given.startsWith('[') || !given.endsWith(']')) { error(29, [given]); return }
+
+    const elements = given.slice(1, -1).split(',')
+            .map(s => parseValue(s.trim()));
+    
+    setList(list, elements);
+}
+export function push(args) {
+    args = checkArgs(2, args, 'push');
+    const list = args[0];
+    const element = args[1];
+    if (getVar(list) === undefined) { setListCall([list, '['+element+']']) }
+
+    getVar(list).push(element);
+}
+
 export function inc(args) {
     args = checkArgs(1, args, 'inc');
     if (getVar(args[0]) === undefined) { error(5, [args[0]]); return; }
@@ -234,35 +273,38 @@ export function dec(args) {
 export function make(args) {
     args = checkArgs(2, args, 'make');
 
-    args[0] = modifiable(args[0]);
-    if (!args[0]) return;
+    const objType = modifiable(args[0]);
+    if (!objType) return;
+    const objPath = objType+'/'+args[1];
+    const pathParts = objPath.split('/');
 
-    const pathParts = [args[0], ...args[1].split('/')];
     // check it exists
-    const obj = retrieve(pathParts, true);
-    if (obj !== false) { error(18, [args[0]+'/'+args[1]]); return; }
+    const obj = findObj(objPath, true); // suppress error
+    if (obj !== false) { error(18, [objPath]); return; }
 
     let current = gameState['main'];
-    for (let next = 0; next < pathParts.length; next++) {
-        current[pathParts[next]] = current[pathParts[next]] ?? {};
-        current = current[pathParts[next]];
+    // obj tree walker
+    for (let partNum = 0; partNum < pathParts.length; partNum++) {
+        let next = pathParts[partNum];
+        // make obj if non existent
+        current[next] = current[next] ?? {};
+        // walk forwards
+        current = current[next];
     }
 }
 export function destroy(args) {
     args = checkArgs(1, args, 'destroy');
     const pathParts = args[0].split('/');
+    pathParts[0] = modifiable(pathParts[0])
+    const objPath = pathParts.join('/');
 
-    pathParts[0] = modifiable(pathParts[0]);
-    if (!pathParts[0]) return;
+    if (findObj(objPath) === undefined) return;
 
-    let obj = findObj(args[0]);
-    if (obj === undefined) return;
-
-    for (let next = 0; next < pathParts.length - 1; next++) {
-        current = current[pathParts[next]];
-    }
-
-    delete current[pathParts[pathParts.length - 1]];
+    const lastPart = pathParts.pop();
+    const parentPath = pathParts.join('/');
+    const parentObj = findObj(parentPath);
+    
+    delete parentObj[lastPart];
 }
 function modifiable(type) {
     switch (type) { // validate type
@@ -278,7 +320,7 @@ function modifiable(type) {
         case 'items':
         case 'dummy':
             return type;
-        default: error(20, [args[0]]); return false;
+        default: error(20, [type]); return false;
     } 
 }
 export function wait(args) {

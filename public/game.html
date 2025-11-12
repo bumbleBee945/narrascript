@@ -9,13 +9,19 @@
 <body>
 
     <!-- HTML -->
-    <div id="display"></div>
+    <div id="gameLoader">
+        <p>Load a Narrascript game file to play.</p>
+        <input type="file" id="gameFilePicker" accept=".json,application/json">
+        <button type="button" id="gameFileUse">Play Uploaded File</button>
+    </div>
+    <div id="gameShell">
+        <div id="display"></div>
 
-    <form id="formInput">
-        <input type="text" id="textInput" name="textInput" placeholder="type here!">
-    </form>
-    <button id="resetButton">Restart</button>
-    
+        <form id="formInput">
+            <input type="text" id="textInput" name="textInput" placeholder="type here!">
+        </form>
+        <button id="resetButton">Restart</button>
+    </div>
     <script type="module" src="main.js"></script>
 
 </body>
